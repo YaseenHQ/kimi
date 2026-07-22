@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import chalk from 'chalk';
 
-import { FooterComponent, formatFooterGitBadge, buildWeightedTips } from '#/tui/components/chrome/footer';
+import {
+  FooterComponent,
+  formatFooterGitBadge,
+  formatUsageStatus,
+  buildWeightedTips,
+} from '#/tui/components/chrome/footer';
 import { darkColors } from '#/tui/theme/colors';
 import type { AppState } from '#/tui/types';
 
@@ -44,6 +49,17 @@ function baseState(overrides: Partial<AppState> = {}): AppState {
 }
 
 describe('FooterComponent — context NaN resilience', () => {
+  it('formats aggregate input, output, and cache-hit usage', () => {
+    expect(
+      formatUsageStatus({
+        inputOther: 512,
+        inputCacheRead: 1_024,
+        inputCacheCreation: 512,
+        output: 256,
+      }),
+    ).toBe('input 2k  output 256  cache hit 67%');
+  });
+
   it('NaN usage → renders 0% (never literal "NaN%")', () => {
     const fc = new FooterComponent(baseState({ contextUsage: Number.NaN }));
     const out = strip(fc.render(120).join(''));

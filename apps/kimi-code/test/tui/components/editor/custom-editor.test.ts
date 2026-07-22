@@ -550,7 +550,8 @@ describe('CustomEditor paste marker expansion', () => {
     simulateLargePaste(editor, 'anything');
     expect(editor.getText()).toContain(longText);
 
-    editor.setText(markerText);
+    editor.handleInput('\u001B[45;5u');
+    expect(editor.getText()).toBe(markerText);
 
     simulateLargePaste(editor, 'anything');
     expect(editor.getText()).not.toContain('[paste #');
@@ -637,6 +638,16 @@ describe('CustomEditor shortcut telemetry hooks', () => {
     editor.handleInput('\u0014');
 
     expect(onToggleTodoExpand).toHaveBeenCalledOnce();
+  });
+
+  it('invokes onCopyLastAssistant on Ctrl+X', () => {
+    const editor = makeEditor();
+    const onCopyLastAssistant = vi.fn();
+    editor.onCopyLastAssistant = onCopyLastAssistant;
+
+    editor.handleInput('\u0018');
+
+    expect(onCopyLastAssistant).toHaveBeenCalledOnce();
   });
 });
 

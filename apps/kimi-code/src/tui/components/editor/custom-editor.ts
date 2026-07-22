@@ -54,6 +54,11 @@ interface AutocompleteTriggerInternals {
   requestAutocomplete: (options: { force: boolean; explicitTab: boolean }) => void;
 }
 
+interface PasteRegistryInternals {
+  pastes: Map<number, string>;
+  pasteCounter: number;
+}
+
 // Mirror pi-tui's private SLASH_COMMAND_SELECT_LIST_LAYOUT
 // (dist/components/editor.js); keep in sync when bumping pi-tui.
 const SLASH_COMMAND_SELECT_LIST_LAYOUT = {
@@ -130,6 +135,7 @@ export class CustomEditor extends Editor {
   public onToggleToolExpand?: () => void;
   public onOpenExternalEditor?: () => void;
   public onCtrlS?: () => void;
+  public onCopyLastAssistant?: () => void;
   /** Return `true` to consume Ctrl+B; return `false`/`undefined` to fall through to the editor default (cursor-left). */
   public onCtrlB?: () => boolean;
   /** Return `true` to consume Ctrl+T (the todo list had overflow to toggle); return `false`/`undefined` to fall through to the editor default. */
@@ -213,6 +219,20 @@ export class CustomEditor extends Editor {
     super.setDisablePasteBurst(disabled);
   }
 
+  override setText(text: string): void {
+    const pasteRegistry = this as unknown as PasteRegistryInternals;
+    const referencedPastes = new Map<number, string>();
+    for (const match of text.matchAll(PASTE_MARKER_RE)) {
+      const pasteId = Number(match[1]);
+      const content = pasteRegistry.pastes.get(pasteId);
+      if (content !== undefined) referencedPastes.set(pasteId, content);
+    }
+    const pasteCounter = pasteRegistry.pasteCounter;
+    super.setText(text);
+    pasteRegistry.pastes = referencedPastes;
+    pasteRegistry.pasteCounter = referencedPastes.size > 0 ? pasteCounter : 0;
+  }
+
   public setInputMode(mode: 'prompt' | 'bash'): void {
     if (this.inputMode === mode) return;
     this.inputMode = mode;
@@ -230,8 +250,8 @@ export class CustomEditor extends Editor {
       if (col < start || col > end) continue;
 
       const pasteId = Number(match[1]);
-      const pastes = (this as unknown as { pastes: Map<number, string> }).pastes;
-      const content = pastes.get(pasteId);
+      const pasteRegistry = this as unknown as PasteRegistryInternals;
+      const content = pasteRegistry.pastes.get(pasteId);
       if (content === undefined) return false;
 
       const text = this.getText();
@@ -440,6 +460,11 @@ export class CustomEditor extends Editor {
 
     if (matchesKey(normalized, Key.ctrl('s'))) {
       this.onCtrlS?.();
+      return;
+    }
+
+    if (matchesKey(normalized, Key.ctrl('x'))) {
+      this.onCopyLastAssistant?.();
       return;
     }
 

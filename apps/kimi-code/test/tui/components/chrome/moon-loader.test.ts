@@ -9,7 +9,7 @@ const loaders: MoonLoader[] = [];
 
 function createLoader(): MoonLoader {
   const ui = { requestRender() {} } as unknown as TUI;
-  const loader = new MoonLoader(ui, 'moon');
+  const loader = new MoonLoader(ui);
   loaders.push(loader);
   return loader;
 }

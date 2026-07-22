@@ -1,9 +1,18 @@
-import { visibleWidth, type TUI } from '@moonshot-ai/pi-tui';
+import {
+  resetCapabilitiesCache,
+  setCapabilities,
+  visibleWidth,
+  type TUI,
+} from '@moonshot-ai/pi-tui';
 import chalk from 'chalk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ToolCallComponent } from '#/tui/components/messages/tool-call';
-import { STATUS_BULLET } from '#/tui/constant/symbols';
+import {
+  GENERIC_TOOL_GLYPH,
+  STATUS_BULLET,
+  TOOL_GLYPHS,
+} from '#/tui/constant/symbols';
 import { darkColors } from '#/tui/theme/colors';
 
 import { captureProcessWrite } from '../../../helpers/process';
@@ -14,7 +23,8 @@ const BEL = String.fromCodePoint(0x07);
 function strip(text: string): string {
   return text
     .replaceAll(/\u001B\[[0-9;]*m/g, '')
-    .replaceAll(new RegExp(`${ESC}\\]8;;[^${BEL}]*${BEL}`, 'g'), '');
+    .replaceAll(new RegExp(`${ESC}\\]8;;[^${BEL}]*${BEL}`, 'g'), '')
+    .replaceAll(new RegExp(`${ESC}\\]8;;.*?${ESC}\\\\`, 'g'), '');
 }
 
 function stubTui(rows: number): TUI {
@@ -27,9 +37,24 @@ function stubTui(rows: number): TUI {
 describe('ToolCallComponent', () => {
   afterEach(() => {
     vi.useRealTimers();
+    resetCapabilitiesCache();
   });
 
-  it('uses the shared non-emoji tool status bullet', () => {
+  it('links file-tool header paths when the terminal supports hyperlinks', () => {
+    setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+    const component = new ToolCallComponent(
+      { id: 'call_read_link', name: 'Read', args: { path: 'src/main.ts' } },
+      undefined,
+      undefined,
+      '/tmp/project',
+    );
+
+    const out = component.render(100).join('\n');
+    expect(out).toContain(`${ESC}]8;;file:///tmp/project/src/main.ts${ESC}\\`);
+    expect(strip(out)).toContain('Using Read (src/main.ts)');
+  });
+
+  it('uses the shared semantic Unicode glyph for a tool', () => {
     const component = new ToolCallComponent(
       {
         id: 'call_read_marker',
@@ -44,9 +69,15 @@ describe('ToolCallComponent', () => {
     );
 
     const out = strip(component.render(100).join('\n'));
-    expect(out).toContain(`${STATUS_BULLET}Used Read`);
+    expect(out).toContain(`${TOOL_GLYPHS['Read']} Used Read`);
     expect(out).not.toContain(`\u23FA Used Read`);
     expect(out).not.toContain(`${String.fromCodePoint(0x23fa, 0xfe0e)} Used Read`);
+  });
+
+  it('keeps every semantic tool glyph to one terminal cell', () => {
+    for (const glyph of [GENERIC_TOOL_GLYPH, ...Object.values(TOOL_GLYPHS)]) {
+      expect(visibleWidth(glyph)).toBe(1);
+    }
   });
 
   describe('detach hint for long-running foreground Bash/Agent', () => {
@@ -300,7 +331,7 @@ describe('ToolCallComponent', () => {
     );
 
     const collapsed = strip(component.render(100).join('\n'));
-    expect(collapsed).toContain(`${STATUS_BULLET}Ran a command`);
+    expect(collapsed).toContain(`${TOOL_GLYPHS['Bash']} Ran a command`);
     expect(collapsed).not.toContain('system-reminder');
     expect(collapsed).not.toContain('task tools');
 

@@ -1,6 +1,8 @@
 import {
+  OPEN_PLATFORMS,
   applyCustomRegistryEntries,
   fetchCustomRegistry,
+  getOpenPlatformById,
   type CustomRegistrySource,
   type ManagedKimiConfigShape,
 } from '@moonshot-ai/kimi-code-oauth';
@@ -26,10 +28,14 @@ import {
   type ProviderManagerOptions,
 } from '../components/dialogs/provider-manager';
 import { TabbedModelSelectorComponent } from '../components/dialogs/tabbed-model-selector';
-import { DEFAULT_OAUTH_PROVIDER_NAME } from '../constant/kimi-tui';
 import { formatErrorMessage } from '../utils/event-payload';
 import { thinkingEffortToConfig } from '../utils/thinking-config';
 import { effectiveModelForHost } from './config';
+import {
+  handleOAuthLogin,
+  handleOpenPlatformLogin,
+  OAUTH_PROVIDERS,
+} from './provider-login';
 import {
   promptApiKey,
   promptBaseUrl,
@@ -54,7 +60,7 @@ function buildProviderManagerOptions(host: SlashCommandHost): ProviderManagerOpt
     providers: host.state.appState.availableProviders,
     activeProviderId,
     onAdd: () => {
-      void handleProviderAdd(host).catch((error: unknown) => {
+      void handleProviderAdd(host, { returnToManager: true }).catch((error: unknown) => {
         host.showError(`Add provider failed: ${formatErrorMessage(error)}`);
       });
     },
@@ -85,15 +91,27 @@ async function handleProviderManagerDeleteSource(
 }
 
 async function handleProviderDelete(host: SlashCommandHost, providerId: string): Promise<void> {
-  if (providerId === DEFAULT_OAUTH_PROVIDER_NAME) {
-    await host.harness.auth.logout(DEFAULT_OAUTH_PROVIDER_NAME);
-    await host.authFlow.refreshConfigAfterLogout();
-    await host.authFlow.clearActiveSessionAfterLogout();
+  const activeProvider =
+    host.state.appState.availableModels[host.state.appState.model]?.provider;
+  if (OAUTH_PROVIDERS.some((provider) => provider.id === providerId)) {
+    await host.harness.auth.logout(providerId, { deprovisionConfig: false });
+    const config = await host.harness.getConfig({ reload: true });
+    if (config.providers[providerId] !== undefined) {
+      await host.harness.removeProvider(providerId);
+    }
+    if (activeProvider === providerId) {
+      await host.authFlow.refreshConfigAfterLogout();
+      await host.authFlow.clearActiveSessionAfterLogout();
+    } else {
+      const updated = await host.harness.getConfig({ reload: true });
+      host.setAppState({
+        availableProviders: updated.providers ?? {},
+        availableModels: updated.models ?? {},
+      });
+    }
     return;
   }
 
-  const activeProvider =
-    host.state.appState.availableModels[host.state.appState.model]?.provider;
   const config = await host.harness.removeProvider(providerId);
   if (activeProvider === providerId) {
     await host.authFlow.refreshConfigAfterLogout();
@@ -106,20 +124,50 @@ async function handleProviderDelete(host: SlashCommandHost, providerId: string):
   }
 }
 
-async function handleProviderAdd(host: SlashCommandHost): Promise<void> {
-  const source = await promptProviderAddSource(host);
-  if (source === undefined) {
-    reopenProviderManager(host);
+export async function handleProviderAdd(
+  host: SlashCommandHost,
+  options: { readonly returnToManager?: boolean } = {},
+): Promise<void> {
+  const returnToManager = (): void => {
+    if (options.returnToManager === true) reopenProviderManager(host);
+  };
+  const method = await promptProviderAuthMethod(host);
+  if (method === undefined) {
+    returnToManager();
     return;
   }
 
+  if (method === 'oauth') {
+    const provider = await promptOAuthProviderSelection(host);
+    if (provider === undefined) {
+      returnToManager();
+      return;
+    }
+    await handleOAuthLogin(host, provider);
+    returnToManager();
+    return;
+  }
+
+  if (method === 'config') {
+    const handled = await handleCustomRegistryAddViaDialog(host);
+    if (!handled) returnToManager();
+    return;
+  }
+
+  const source = await promptApiKeyProviderSource(host);
+  if (source === undefined) {
+    returnToManager();
+    return;
+  }
+  const platform = getOpenPlatformById(source);
+  if (platform !== undefined) {
+    await handleOpenPlatformLogin(host, platform);
+    returnToManager();
+    return;
+  }
   if (source === 'known') {
     await handleCatalogProviderAdd(host);
     return;
-  }
-  const handled = await handleCustomRegistryAddViaDialog(host);
-  if (!handled) {
-    reopenProviderManager(host);
   }
 }
 
@@ -129,19 +177,93 @@ function reopenProviderManager(host: SlashCommandHost): void {
   host.mountEditorReplacement(component);
 }
 
-function promptProviderAddSource(
+function promptProviderAuthMethod(
   host: SlashCommandHost,
-): Promise<'known' | 'custom' | undefined> {
+): Promise<'oauth' | 'api-key' | 'config' | undefined> {
   return new Promise((resolve) => {
     const picker = new ChoicePickerComponent({
       title: 'Add provider',
       options: [
-        { value: 'known', label: 'Known third-party provider' },
-        { value: 'custom', label: 'Custom registry (api.json)' },
+        {
+          value: 'oauth',
+          label: 'OAuth',
+          description: 'Use OAuth with a supported coding subscription.',
+        },
+        {
+          value: 'api-key',
+          label: 'API Key',
+          description: 'Connect Kimi Platform or another known API provider.',
+        },
+        {
+          value: 'config',
+          label: 'Config.toml',
+          description: 'Import providers and models from a custom api.json registry.',
+        },
       ],
       onSelect: (value) => {
         host.restoreEditor();
-        resolve(value === 'known' || value === 'custom' ? value : undefined);
+        resolve(
+          value === 'oauth' || value === 'api-key' || value === 'config'
+            ? value
+            : undefined,
+        );
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(undefined);
+      },
+    });
+    host.mountEditorReplacement(picker);
+  });
+}
+
+function promptOAuthProviderSelection(
+  host: SlashCommandHost,
+): Promise<(typeof OAUTH_PROVIDERS)[number] | undefined> {
+  return new Promise((resolve) => {
+    const picker = new ChoicePickerComponent({
+      title: 'Connect with OAuth',
+      options: OAUTH_PROVIDERS.map((provider) => ({
+        value: provider.id,
+        label: provider.label,
+        description: provider.description,
+      })),
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(OAUTH_PROVIDERS.find((provider) => provider.id === value));
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(undefined);
+      },
+    });
+    host.mountEditorReplacement(picker);
+  });
+}
+
+function promptApiKeyProviderSource(
+  host: SlashCommandHost,
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const options = [
+      ...OPEN_PLATFORMS.map((platform) => ({
+        value: platform.id,
+        label: platform.name,
+        description: platform.baseUrl,
+      })),
+      {
+        value: 'known',
+        label: 'Known API provider',
+        description: 'Choose from the models.dev provider catalog.',
+      },
+    ];
+    const validValues = new Set(options.map((option) => option.value));
+    const picker = new ChoicePickerComponent({
+      title: 'Connect with API key',
+      options,
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(validValues.has(value) ? value : undefined);
       },
       onCancel: () => {
         host.restoreEditor();

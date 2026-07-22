@@ -311,6 +311,13 @@ export const BUILTIN_SLASH_COMMANDS = [
     priority: 80,
   },
   {
+    name: 'tree',
+    aliases: [],
+    description: 'Browse previous turns and fork from the selected point',
+    priority: 80,
+    availability: 'idle-only',
+  },
+  {
     name: 'title',
     aliases: ['rename'],
     description: 'Set or show session title',

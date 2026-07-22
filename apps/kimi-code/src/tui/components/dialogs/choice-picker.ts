@@ -49,6 +49,9 @@ export interface ChoicePickerOptions {
   /** Items per page. Lists longer than this paginate. */
   readonly pageSize?: number;
   readonly onSelect: (value: string) => void;
+  /** Optional action for the currently highlighted choice. Unlike selection,
+   *  this keeps the picker open. Used by `/tree` to copy an older turn. */
+  readonly onCopy?: (option: ChoiceOption) => void;
   /** When provided, Alt+S invokes this with the selected value instead of
    * onSelect — used to apply the choice to the current session only. */
   readonly onSessionOnlySelect?: (value: string) => void;
@@ -74,6 +77,28 @@ function wrapDescription(text: string, width: number): string[] {
     current = visibleWidth(word) <= maxWidth ? word : truncateToWidth(word, maxWidth, '…');
   }
 
+  if (current.length > 0) lines.push(current);
+  return lines;
+}
+
+function wrapHint(text: string, width: number): string[] {
+  const segments = text.split(' · ').filter((segment) => segment.length > 0);
+  const lines: string[] = [];
+  let current = '';
+  for (const segment of segments) {
+    const candidate = current.length === 0 ? segment : `${current} · ${segment}`;
+    if (visibleWidth(candidate) <= width) {
+      current = candidate;
+      continue;
+    }
+    if (current.length > 0) lines.push(current);
+    if (visibleWidth(segment) <= width) {
+      current = segment;
+    } else {
+      lines.push(...wrapDescription(segment, width));
+      current = '';
+    }
+  }
   if (current.length > 0) lines.push(current);
   return lines;
 }
@@ -107,6 +132,11 @@ export class ChoicePickerComponent extends Container implements Focusable {
       if (chosen !== undefined) this.opts.onSessionOnlySelect(chosen.value);
       return;
     }
+    if (matchesKey(data, Key.ctrl('x')) && this.opts.onCopy !== undefined) {
+      const chosen = this.list.selected();
+      if (chosen !== undefined) this.opts.onCopy(chosen);
+      return;
+    }
     // Left/Right page through the list (this picker has no horizontal control).
     if (matchesKey(data, Key.left)) {
       this.list.pageUp();
@@ -137,6 +167,7 @@ export class ChoicePickerComponent extends Container implements Focusable {
     // the search line. Key vocabulary is lowercase to match every list dialog.
     const navParts = ['↑↓ navigate'];
     if (view.page.pageCount > 1) navParts.push('←→ page');
+    if (this.opts.onCopy !== undefined) navParts.push('Ctrl-X copy');
     navParts.push('Enter select', 'Esc cancel');
     const hint = this.opts.hint ?? navParts.join(' · ');
 
@@ -148,11 +179,13 @@ export class ChoicePickerComponent extends Container implements Focusable {
       currentTheme.boldFg('primary', ` ${this.opts.title}`) + titleSuffix,
     ];
     for (const hintLine of hintLines) {
-      lines.push(
-        this.opts.formatHint === undefined
-          ? currentTheme.fg('textMuted', ` ${hintLine}`)
-          : this.opts.formatHint(` ${hintLine}`),
-      );
+      for (const wrappedHintLine of wrapHint(hintLine, Math.max(1, width - 1))) {
+        lines.push(
+          this.opts.formatHint === undefined
+            ? currentTheme.fg('textMuted', ` ${wrappedHintLine}`)
+            : this.opts.formatHint(` ${wrappedHintLine}`),
+        );
+      }
     }
     if (this.opts.notice !== undefined) {
       const tone = this.opts.noticeTone ?? 'success';

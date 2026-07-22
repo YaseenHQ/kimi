@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { visibleWidth } from '@moonshot-ai/pi-tui';
 
 import { ChoicePickerComponent, type ChoiceOption } from '#/tui/components/dialogs/choice-picker';
 import { EditorSelectorComponent } from '#/tui/components/dialogs/editor-selector';
@@ -144,6 +145,44 @@ describe('ChoicePickerComponent', () => {
 
     picker.handleInput(' ');
     expect(onSelect).toHaveBeenCalledWith('a');
+  });
+
+  it('copies the highlighted option without selecting or closing', () => {
+    const onCopy = vi.fn();
+    const onSelect = vi.fn();
+    const onCancel = vi.fn();
+    const options = [
+      { value: 'a', label: 'Alpha' },
+      { value: 'b', label: 'Beta' },
+    ];
+    const picker = new ChoicePickerComponent({
+      title: 'Pick one',
+      options,
+      onCopy,
+      onSelect,
+      onCancel,
+    });
+
+    picker.handleInput('\u0018');
+
+    expect(onCopy).toHaveBeenCalledWith(options[0]);
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('wraps copy controls and keeps every line within narrow terminals', () => {
+    const picker = new ChoicePickerComponent({
+      title: 'Fork from a turn',
+      options: [{ value: 'a', label: 'A long turn that must be clipped safely' }],
+      onCopy: vi.fn(),
+      onSelect: vi.fn(),
+      onCancel: vi.fn(),
+    });
+
+    const lines = picker.render(24);
+
+    expect(lines.map(strip).join('\n')).toContain('Ctrl-X copy');
+    expect(lines.every((line) => visibleWidth(line) <= 24)).toBe(true);
   });
 
   it('renders the selected option description in descriptionTone, others in textMuted', () => {

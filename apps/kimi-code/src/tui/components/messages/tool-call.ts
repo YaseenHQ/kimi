@@ -3,9 +3,18 @@
  * Supports expand/collapse via Ctrl+O.
  */
 
-import { isAbsolute, relative, sep } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-import { Container, Spacer, Text, truncateToWidth, visibleWidth } from '@moonshot-ai/pi-tui';
+import {
+  Container,
+  Spacer,
+  Text,
+  getCapabilities,
+  hyperlink,
+  truncateToWidth,
+  visibleWidth,
+} from '@moonshot-ai/pi-tui';
 import type { Component, TUI } from '@moonshot-ai/pi-tui';
 import { highlightLines, langFromPath } from '#/tui/components/media/code-highlight';
 import { renderDiffLinesClustered } from '#/tui/components/media/diff-preview';
@@ -20,7 +29,13 @@ import {
   STREAMING_ARGS_FIELD_RE,
   STREAMING_ARGS_PREVIEW_MAX_CHARS,
 } from '#/tui/constant/streaming';
-import { FAILURE_MARK, STATUS_BULLET, SUCCESS_MARK } from '#/tui/constant/symbols';
+import {
+  FAILURE_MARK,
+  GENERIC_TOOL_GLYPH,
+  STATUS_BULLET,
+  SUCCESS_MARK,
+  TOOL_GLYPHS,
+} from '#/tui/constant/symbols';
 import { currentTheme } from '#/tui/theme';
 import { createMarkdownTheme } from '#/tui/theme/pi-tui-theme';
 import type { ToolCallBlockData, ToolResultBlockData } from '#/tui/types';
@@ -455,6 +470,12 @@ function extractKeyArgument(
     }
   }
   return null;
+}
+
+function extractToolPath(toolName: string, args: Record<string, unknown>): string | undefined {
+  if (toolName !== 'Read' && toolName !== 'Write' && toolName !== 'Edit') return undefined;
+  const value = args['path'] ?? args['file_path'];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function formatSubagentLabel(agentName: string | undefined): string {
@@ -1417,15 +1438,16 @@ export class ToolCallComponent extends Container {
     const isError = result?.is_error ?? false;
     const isTruncated = toolCall.truncated === true && !isFinished;
 
+    const toolGlyph = TOOL_GLYPHS[toolCall.name] ?? GENERIC_TOOL_GLYPH;
     let bullet: string;
     if (isFinished) {
-      bullet = isError ? currentTheme.fg('error', '✗ ') : currentTheme.fg('success', STATUS_BULLET);
+      bullet = isError
+        ? currentTheme.fg('error', FAILURE_MARK)
+        : currentTheme.fg('success', `${toolGlyph} `);
     } else if (isTruncated) {
-      bullet = currentTheme.fg('error', '✗ ');
+      bullet = currentTheme.fg('error', FAILURE_MARK);
     } else {
-      // Solid bullet for in-flight tools — the previous marker ↔ blank
-      // toggle caused visible flicker on every re-render.
-      bullet = currentTheme.fg('text', STATUS_BULLET);
+      bullet = currentTheme.fg('text', `${toolGlyph} `);
     }
 
     if (toolCall.name === 'ExitPlanMode') {
@@ -1500,7 +1522,14 @@ export class ToolCallComponent extends Container {
       decoded !== null
         ? `${currentTheme.boldFg('primary', decoded.toolName)}${currentTheme.dim(` · MCP/${decoded.serverName}`)}`
         : currentTheme.boldFg('primary', toolCall.name);
-    const argStr = keyArg ? currentTheme.dim(` (${keyArg})`) : '';
+    let argStr = keyArg ? currentTheme.dim(` (${keyArg})`) : '';
+    const toolPath = extractToolPath(toolCall.name, toolCall.args);
+    if (argStr.length > 0 && toolPath !== undefined && getCapabilities().hyperlinks) {
+      const absolutePath = isAbsolute(toolPath)
+        ? toolPath
+        : resolve(this.workspaceDir ?? process.cwd(), toolPath);
+      argStr = hyperlink(argStr, pathToFileURL(absolutePath).href);
+    }
     let chipStr = '';
     if (isFinished && result) chipStr = this.buildHeaderChip(result);
     return `${bullet}${verbStyled} ${toolLabel}${argStr}${chipStr}`;

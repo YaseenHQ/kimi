@@ -148,6 +148,7 @@ export class AuthFlowController {
       maxContextTokens: 0,
       contextUsage: 0,
       contextTokens: 0,
+      usage: undefined,
     });
   }
 

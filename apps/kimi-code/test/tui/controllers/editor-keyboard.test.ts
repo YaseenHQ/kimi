@@ -15,6 +15,7 @@ interface Harness {
   readonly cancelCompaction: ReturnType<typeof vi.fn>;
   readonly btwCancelRunning: ReturnType<typeof vi.fn>;
   readonly btwCloseOrCancel: ReturnType<typeof vi.fn>;
+  readonly copyLastAssistantMessage: ReturnType<typeof vi.fn>;
 }
 
 function createHarness(options: { streamingPhase?: string; isCompacting?: boolean } = {}): Harness {
@@ -29,6 +30,7 @@ function createHarness(options: { streamingPhase?: string; isCompacting?: boolea
   const cancelCompaction = vi.fn(async () => {});
   const btwCancelRunning = vi.fn(() => false);
   const btwCloseOrCancel = vi.fn(() => false);
+  const copyLastAssistantMessage = vi.fn();
   const session = { cancel: vi.fn(async () => {}), cancelCompaction };
 
   const host = {
@@ -44,7 +46,9 @@ function createHarness(options: { streamingPhase?: string; isCompacting?: boolea
     },
     session,
     btwPanelController: { cancelRunning: btwCancelRunning, closeOrCancel: btwCloseOrCancel },
+    track: vi.fn(),
     openUndoSelector,
+    copyLastAssistantMessage,
     cancelRunningShellCommand,
   } as unknown as EditorKeyboardHost;
 
@@ -62,6 +66,7 @@ function createHarness(options: { streamingPhase?: string; isCompacting?: boolea
     cancelCompaction,
     btwCancelRunning,
     btwCloseOrCancel,
+    copyLastAssistantMessage,
   };
 }
 
@@ -82,6 +87,22 @@ function pressNonEscape(editor: Harness['editor']): void {
   if (handler === undefined) throw new Error('onNonEscapeInput handler not installed');
   (handler as () => void)();
 }
+
+function pressCopy(editor: Harness['editor']): void {
+  const handler = editor['onCopyLastAssistant'];
+  if (handler === undefined) throw new Error('copy handler not installed');
+  (handler as () => void)();
+}
+
+describe('EditorKeyboardController copy shortcut', () => {
+  it('copies the last assistant message through the host', () => {
+    const { editor, copyLastAssistantMessage } = createHarness();
+
+    pressCopy(editor);
+
+    expect(copyLastAssistantMessage).toHaveBeenCalledOnce();
+  });
+});
 
 describe('EditorKeyboardController double-Esc undo', () => {
   beforeEach(() => {

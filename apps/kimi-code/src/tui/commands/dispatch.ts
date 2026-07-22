@@ -50,6 +50,7 @@ import {
   handleExportMdCommand,
   handleForkCommand,
   handleInitCommand,
+  handleTreeCommand,
   handleTitleCommand,
 } from './session';
 import { handleSwarmCommand } from './swarm';
@@ -88,6 +89,7 @@ export {
   handleExportMdCommand,
   handleForkCommand,
   handleInitCommand,
+  handleTreeCommand,
   handleTitleCommand,
 } from './session';
 export { handleUndoCommand } from './undo';
@@ -353,6 +355,9 @@ async function handleBuiltInSlashCommand(
       return;
     case 'fork':
       await handleForkCommand(host, args);
+      return;
+    case 'tree':
+      await handleTreeCommand(host, args);
       return;
     case 'export-md':
       await handleExportMdCommand(host, args);

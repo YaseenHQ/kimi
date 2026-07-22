@@ -238,7 +238,7 @@ export class PluginInstallTrustConfirmComponent extends ChoicePickerComponent {
       hint: '↑↓ navigate · Enter/Space select · ←/Esc cancel',
       formatHint: mutedHintLine,
       notice:
-        '⚠️ This is a third-party plugin that Kimi has not reviewed. It can bundle MCP servers, ' +
+        '⚠ This is a third-party plugin that Kimi has not reviewed. It can bundle MCP servers, ' +
         'skills, or files that run code and access your workspace. Install it only if you ' +
         'trust the source.',
       noticeTone: 'warning',

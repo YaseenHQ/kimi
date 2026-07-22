@@ -6,7 +6,7 @@ import {
 
 import { FooterComponent } from './components/chrome/footer';
 import { GutterContainer } from './components/chrome/gutter-container';
-import type { MoonLoader, SpinnerStyle } from './components/chrome/moon-loader';
+import type { MoonLoader } from './components/chrome/moon-loader';
 import { TodoPanelComponent } from './components/chrome/todo-panel';
 import type { SessionRow } from './components/dialogs/session-picker';
 import { CustomEditor } from './components/editor/custom-editor';
@@ -43,7 +43,7 @@ export interface TUIState {
   livePane: LivePaneState;
   transcriptEntries: TranscriptEntry[];
   terminalState: TerminalState;
-  activitySpinner: { instance: MoonLoader; style: SpinnerStyle } | null;
+  activitySpinner: MoonLoader | null;
   toolOutputExpanded: boolean;
   sessions: SessionRow[];
   loadingSessions: boolean;

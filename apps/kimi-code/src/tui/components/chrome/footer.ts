@@ -9,7 +9,7 @@
 import type { Component } from '@moonshot-ai/pi-tui';
 import { truncateToWidth, visibleWidth } from '@moonshot-ai/pi-tui';
 import chalk from 'chalk';
-import { effectiveModelAlias } from '@moonshot-ai/kimi-code-sdk';
+import { effectiveModelAlias, type TokenUsage } from '@moonshot-ai/kimi-code-sdk';
 
 import { ALL_TIPS, type ToolbarTip } from '#/tui/constant/tips';
 import { isRainbowDancing, renderDanceFooterModel } from '#/tui/easter-eggs/dance';
@@ -170,6 +170,28 @@ function formatContextStatus(usage: number, tokens?: number, maxTokens?: number)
     return `context: ${pct}% (${formatTokenCount(tokens)}/${formatTokenCount(maxTokens)})`;
   }
   return `context: ${String(usagePercentFromRatio(usage))}%`;
+}
+
+function finiteUsage(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+export function formatUsageStatus(usage: TokenUsage | undefined): string {
+  if (usage === undefined) return '';
+  const uncached = finiteUsage(usage.inputOther);
+  const cacheRead = finiteUsage(usage.inputCacheRead);
+  const cacheWrite = finiteUsage(usage.inputCacheCreation);
+  const input = uncached + cacheRead + cacheWrite;
+  const output = finiteUsage(usage.output);
+  if (input === 0 && output === 0) return '';
+
+  const parts = [`input ${formatTokenCount(input)}`, `output ${formatTokenCount(output)}`];
+  if (cacheRead > 0 || cacheWrite > 0) {
+    const cacheableInput = uncached + cacheRead;
+    const hitRate = cacheableInput > 0 ? Math.round((cacheRead / cacheableInput) * 100) : 0;
+    parts.push(`cache hit ${String(hitRate)}%`);
+  }
+  return parts.join('  ');
 }
 
 export function formatFooterGitBadge(status: GitStatus, colors: ColorPalette): string {
@@ -340,16 +362,20 @@ export class FooterComponent implements Component {
     );
     const contextWidth = visibleWidth(contextText);
     let line2: string;
-    if (this.transientHint) {
+    const usageText = formatUsageStatus(state.usage?.total);
+    const leftStatus = this.transientHint ?? usageText;
+    if (leftStatus) {
       const maxHintWidth = Math.max(0, width - contextWidth - 1);
       const shownHint =
-        visibleWidth(this.transientHint) <= maxHintWidth
-          ? this.transientHint
-          : truncateToWidth(this.transientHint, maxHintWidth, '…');
+        visibleWidth(leftStatus) <= maxHintWidth
+          ? leftStatus
+          : truncateToWidth(leftStatus, maxHintWidth, '…');
       const hintWidth = visibleWidth(shownHint);
       const pad = Math.max(0, width - hintWidth - contextWidth);
       line2 =
-        chalk.hex(colors.warning).bold(shownHint) +
+        (this.transientHint
+          ? chalk.hex(colors.warning).bold(shownHint)
+          : chalk.hex(colors.textDim)(shownHint)) +
         ' '.repeat(pad) +
         chalk.hex(colors.text)(contextText);
     } else {

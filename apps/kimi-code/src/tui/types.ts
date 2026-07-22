@@ -5,6 +5,7 @@ import type {
   PermissionMode,
   ProviderConfig,
   PromptPart,
+  SessionUsage,
   ThinkingEffort,
   ToolInputDisplay,
 } from '@moonshot-ai/kimi-code-sdk';
@@ -41,6 +42,10 @@ export interface AppState {
   contextUsage: number;
   contextTokens: number;
   maxContextTokens: number;
+  /** Aggregate persisted usage for the active session. */
+  usage?: SessionUsage;
+  /** Transient provider-retry status shown in the activity pane. */
+  retryStatus?: StepRetryStatus;
   isCompacting: boolean;
   isReplaying: boolean;
   streamingPhase: 'idle' | 'waiting' | 'thinking' | 'composing' | 'shell';
@@ -60,6 +65,16 @@ export interface AppState {
   mcpServersSummary: string | null;
   /** Optional banner shown below the welcome panel; null means no banner to render. */
   banner?: BannerState | null;
+}
+
+export interface StepRetryStatus {
+  readonly failedAttempt: number;
+  readonly nextAttempt: number;
+  readonly maxAttempts: number;
+  readonly delayMs: number;
+  readonly errorName: string;
+  readonly errorMessage: string;
+  readonly statusCode?: number;
 }
 
 export interface ToolCallBlockData {

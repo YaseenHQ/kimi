@@ -2,12 +2,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { Session } from '@moonshot-ai/kimi-code-sdk';
+import type { Session, SessionTurn } from '@moonshot-ai/kimi-code-sdk';
 
 import { detectInstallSource } from '#/cli/update/source';
+import { copyTextToClipboard } from '#/utils/clipboard/clipboard-text';
 import { detectShellEnvironment } from '#/utils/process/shell-env';
 import { toTerminalHyperlink } from '#/utils/terminal-hyperlink';
 import { LLM_NOT_SET_MESSAGE, NO_ACTIVE_SESSION_MESSAGE } from '../constant/kimi-tui';
+import { ChoicePickerComponent, type ChoiceOption } from '../components/dialogs/choice-picker';
 import { isAbortError } from '../utils/errors';
 import { formatErrorMessage } from '../utils/event-payload';
 import { buildExportMarkdown } from '../utils/export-markdown';
@@ -75,6 +77,116 @@ export async function handleForkCommand(host: SlashCommandHost, args: string): P
   } catch (error) {
     const msg = formatErrorMessage(error);
     host.showError(`Failed to switch to forked session: ${msg}`);
+  }
+}
+
+export interface SessionTreeChoice extends ChoiceOption {
+  readonly turnIndex: number;
+  readonly copyText: string;
+}
+
+export function createSessionTreeChoices(
+  turns: readonly SessionTurn[],
+): readonly SessionTreeChoice[] {
+  return turns.map((turn, index) => ({
+    value: String(turn.turnIndex),
+    turnIndex: turn.turnIndex,
+    copyText: turn.prompt,
+    label: `${index === turns.length - 1 ? '└─' : '├─'} ${turn.prompt}`,
+  }));
+}
+
+export async function handleTreeCommand(host: SlashCommandHost, args: string): Promise<void> {
+  if (args.trim().length > 0) {
+    host.showError('Usage: /tree');
+    return;
+  }
+
+  const session = host.session;
+  if (session === undefined) {
+    host.showError(NO_ACTIVE_SESSION_MESSAGE);
+    return;
+  }
+
+  let choices: readonly SessionTreeChoice[];
+  try {
+    choices = createSessionTreeChoices(await session.listTurns());
+  } catch (error) {
+    host.showError(`Failed to load session tree: ${formatErrorMessage(error)}`);
+    return;
+  }
+
+  if (choices.length === 0) {
+    host.showStatus('No user turns in this session.', 'warning');
+    return;
+  }
+
+  const byValue = new Map(choices.map((choice) => [choice.value, choice]));
+  host.mountEditorReplacement(
+    new ChoicePickerComponent({
+      title: 'Fork from a turn',
+      options: choices,
+      currentValue: choices.at(-1)?.value,
+      searchable: true,
+      onCopy: (option) => {
+        const choice = byValue.get(option.value);
+        if (choice === undefined) return;
+        void copySessionTreeChoice(host, choice);
+      },
+      onSelect: (value) => {
+        const choice = byValue.get(value);
+        if (choice === undefined) return;
+        host.restoreEditor();
+        void forkFromTreeChoice(host, session, choice);
+      },
+      onCancel: () => {
+        host.restoreEditor();
+      },
+    }),
+  );
+}
+
+async function copySessionTreeChoice(
+  host: SlashCommandHost,
+  choice: SessionTreeChoice,
+): Promise<void> {
+  try {
+    const method = await copyTextToClipboard(choice.copyText);
+    host.showStatus(
+      method === 'native'
+        ? 'Copied selected turn to clipboard.'
+        : 'Copied selected turn via terminal escape sequence (unverified).',
+    );
+  } catch (error) {
+    host.showError(`Failed to copy selected turn: ${formatErrorMessage(error)}`);
+  }
+}
+
+async function forkFromTreeChoice(
+  host: SlashCommandHost,
+  source: Session,
+  choice: SessionTreeChoice,
+): Promise<void> {
+  let forked: Session;
+  try {
+    forked = await host.harness.forkSession({
+      id: source.id,
+      title: `Fork: ${forkSourceTitle(host, source)}`,
+      turnIndex: choice.turnIndex,
+    });
+  } catch (error) {
+    host.showError(`Failed to fork session: ${formatErrorMessage(error)}`);
+    return;
+  }
+
+  try {
+    await host.switchToSession(
+      forked,
+      `Session forked from turn ${String(choice.turnIndex + 1)} (${forked.id}). ` +
+        `To return to the original session: kimi -r ${source.id}`,
+    );
+  } catch (error) {
+    host.showError(`Failed to switch to forked session: ${formatErrorMessage(error)}`);
   }
 }
 
