@@ -449,8 +449,9 @@ export class KimiAuthFacade {
         // fresh token, so proxy-ep rotation does not strand requests.
         providerBaseUrl = githubCopilotApiBaseUrl(accessToken, enterpriseDomain);
         try {
-          // Enable only catalog-known ids. Never mutate policy for arbitrary
-          // model ids returned by the remote discovery endpoint.
+          // `models` is still the unfiltered static catalog here. Enable those
+          // known ids before live discovery removes disabled-policy entries;
+          // never mutate arbitrary ids returned only by the remote endpoint.
           await enableGitHubCopilotModelsForIds(
             accessToken,
             models.map((model) => model.id),

@@ -14,6 +14,12 @@ function makeHost() {
     providers: {
       anthropic: { type: 'anthropic', oauth: { storage: 'file', key: 'anthropic' } },
       qwen: { type: 'anthropic', baseUrl: 'https://example.test', apiKey: 'secret' },
+      deepseek: {
+        type: 'openai',
+        baseUrl: 'https://api.deepseek.test',
+        apiKey: '',
+        env: { OPENAI_API_KEY: 'fallback-secret', OPENAI_BASE_URL: 'https://fallback.test' },
+      },
     },
     models: {
       'anthropic/claude': { provider: 'anthropic', model: 'claude' },
@@ -88,5 +94,24 @@ describe('/logout', () => {
     });
     expect(host.authFlow.clearActiveSessionAfterLogout).not.toHaveBeenCalled();
     expect(host.authFlow.refreshConfigAfterLogout).toHaveBeenCalledOnce();
+  });
+
+  it('clears a config.toml env-table credential without removing other env values', async () => {
+    const { host, harness } = makeHost();
+    promptState.selected = 'deepseek';
+
+    await handleLogoutCommand(host);
+
+    expect(harness.setConfig).toHaveBeenCalledWith({
+      providers: {
+        deepseek: {
+          type: 'openai',
+          baseUrl: 'https://api.deepseek.test',
+          apiKey: '',
+          env: { OPENAI_API_KEY: '', OPENAI_BASE_URL: 'https://fallback.test' },
+        },
+      },
+    });
+    expect(harness.removeProvider).not.toHaveBeenCalled();
   });
 });
