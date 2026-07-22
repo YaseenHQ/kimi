@@ -23,7 +23,16 @@ import {
   getOpenPlatformById,
   isOpenPlatformId,
 } from './open-platform';
+import { OAuthUnauthorizedError } from './errors';
 import { isRecord } from './utils';
+
+function isLoginRequiredError(error: unknown): boolean {
+  if (error instanceof OAuthUnauthorizedError) return true;
+  if (error instanceof Error && (error as { code?: unknown }).code === 'auth.login_required') {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Host capabilities the refresh orchestrator needs. Intentionally typed against
@@ -453,10 +462,12 @@ export async function refreshProviderModels(
         }
       }
     } catch (error) {
-      failed.push({
-        provider: KIMI_CODE_PROVIDER_NAME,
-        reason: error instanceof Error ? error.message : String(error),
-      });
+      if (!isLoginRequiredError(error)) {
+        failed.push({
+          provider: KIMI_CODE_PROVIDER_NAME,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
