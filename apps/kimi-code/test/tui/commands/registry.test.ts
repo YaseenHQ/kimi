@@ -146,6 +146,7 @@ describe('built-in slash command registry', () => {
     const names = BUILTIN_SLASH_COMMANDS.map((command) => command.name);
 
     expect(new Set(names).size).toBe(names.length);
+    expect(names).not.toContain('provider');
     expect(names).toEqual(
       expect.arrayContaining([
         'add-dir',

@@ -13,8 +13,7 @@ Some commands are only available in the idle state. Executing these commands whi
 | Command | Alias | Description | Always available |
 | --- | --- | --- | --- |
 | `/login` | — | Select an account or platform and log in: Kimi Code uses OAuth device-code flow; Kimi Platform uses API key login | No |
-| `/logout` | — | Clear credentials for the currently selected account | No |
-| `/provider` | — | Open the interactive provider manager to view, add, and remove configured providers. See [Platforms & Models — `/provider` and provider management](../configuration/providers.md#provider-与供应商管理) | Yes |
+| `/logout` | — | Clear individual or bundled credentials, or remove saved provider configuration | No |
 | `/model` | — | Switch the LLM model used in the current session | Yes |
 | `/settings` | `/config` | Open the settings panel inside the TUI | Yes |
 | `/experiments` | `/experimental` | Open the experimental feature panel | Yes |

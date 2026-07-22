@@ -41,7 +41,6 @@ import { handleFeedbackCommand, showMcpServers, showStatusReport, showUsage } fr
 import { handleAddDirCommand } from './add-dir';
 import { parseSlashInput } from './parse';
 import { handlePluginsCommand } from './plugins';
-import { handleProviderCommand } from './provider';
 import type { BuiltinSlashCommandName } from './registry';
 import { handleReloadCommand, handleReloadTuiCommand } from './reload';
 import { resolveSlashCommandInput, slashBusyMessage } from './resolve';
@@ -307,9 +306,6 @@ async function handleBuiltInSlashCommand(
       return;
     case 'effort':
       await handleEffortCommand(host, args);
-      return;
-    case 'provider':
-      await handleProviderCommand(host);
       return;
     case 'permission':
       showPermissionPicker(host);

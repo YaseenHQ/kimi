@@ -43,6 +43,64 @@ export function promptLogoutProviderSelection(
   });
 }
 
+export function promptProviderConfigurationRemoval(
+  host: SlashCommandHost,
+  options: readonly ChoiceOption[],
+  currentValue: string | undefined,
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const picker = new ChoicePickerComponent({
+      title: 'Remove saved provider configuration',
+      options,
+      currentValue,
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(value);
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(undefined);
+      },
+    });
+    host.mountEditorReplacement(picker);
+  });
+}
+
+export function promptConfirmProviderConfigurationRemoval(
+  host: SlashCommandHost,
+  label: string,
+  providerLabels: readonly string[],
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const picker = new ChoicePickerComponent({
+      title: `Remove ${label}?`,
+      options: [
+        {
+          value: 'remove',
+          label: 'Remove configuration',
+          description: `Deletes providers and models: ${providerLabels.join(', ')}`,
+          descriptionTone: 'warning',
+        },
+        {
+          value: 'cancel',
+          label: 'Cancel',
+          description: 'Keep the saved configuration.',
+        },
+      ],
+      currentValue: 'cancel',
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(value === 'remove');
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(false);
+      },
+    });
+    host.mountEditorReplacement(picker);
+  });
+}
+
 export function promptExistingOAuthAction(
   host: SlashCommandHost,
   providerName: string,

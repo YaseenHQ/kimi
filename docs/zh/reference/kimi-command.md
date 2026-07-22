@@ -297,7 +297,7 @@ kimi vis --host 0.0.0.0 --port 8123 --no-open
 
 ### `kimi provider`
 
-在 shell 中管理供应商，相当于 TUI 中 `/provider` 的非交互版本。适合脚本化部署、CI 初始化，以及在新机器上一行完成配置。
+在 shell 中以非交互方式管理供应商。适合脚本化部署、CI 初始化，以及在新机器上一行完成配置。
 
 ```sh
 kimi provider <action> [options]

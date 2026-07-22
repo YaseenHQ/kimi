@@ -41,14 +41,14 @@ describe('provider connection flow', () => {
     const { host, mounted } = makeHost();
     const connecting = handleProviderAdd(host as never);
 
-    expect(render(mounted())).toContain('OAuth');
-    expect(render(mounted())).toContain('API Key');
-    expect(render(mounted())).toContain('Config.toml');
+    expect(render(mounted())).toContain('Sign in with an account (OAuth)');
+    expect(render(mounted())).toContain('Connect with an API key');
+    expect(render(mounted())).not.toContain('Config.toml');
 
     mounted().handleInput(ENTER);
     await Promise.resolve();
 
-    expect(render(mounted())).toContain('Connect with OAuth');
+    expect(render(mounted())).toContain('Sign in with an account (OAuth)');
     expect(render(mounted())).toContain('Kimi Code');
     expect(render(mounted())).toContain('xAI');
     expect(render(mounted())).toContain('OpenAI Codex');
@@ -70,16 +70,22 @@ describe('provider connection flow', () => {
     expect(output).toContain('platform.kimi.com');
     expect(output).toContain('platform.kimi.ai');
     expect(output).toContain('Known API provider');
-    expect(output).not.toContain('Custom registry (api.json)');
+    expect(output).toContain('Custom registry (api.json)');
 
     mounted().handleInput(ESC);
     await connecting;
   });
 
-  it('routes Config.toml to the custom registry import', async () => {
+  it('routes the API-key custom-registry option to registry import', async () => {
     const { host, mounted } = makeHost();
     const connecting = handleProviderAdd(host as never);
 
+    mounted().handleInput(DOWN);
+    mounted().handleInput(ENTER);
+    await Promise.resolve();
+
+    // Two Kimi Platform regions, known provider, then custom registry.
+    mounted().handleInput(DOWN);
     mounted().handleInput(DOWN);
     mounted().handleInput(DOWN);
     mounted().handleInput(ENTER);

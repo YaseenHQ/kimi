@@ -32,7 +32,7 @@ describe('ChoicePickerComponent', () => {
 
     const titleIdx = lines.findIndex((l) => l.includes('Add provider'));
     expect(titleIdx).toBeGreaterThanOrEqual(0);
-    // Title carries the same "(type to search)" suffix as /model and /provider.
+    // Title carries the same "(type to search)" suffix as other searchable pickers.
     expect(lines[titleIdx]).toContain('(type to search)');
     expect(lines[titleIdx]).not.toContain('type to filter');
     // Hint sits directly under the title and uses lowercase key vocabulary.
