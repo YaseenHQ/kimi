@@ -141,6 +141,30 @@ describe('updateActivityPane terminal progress', () => {
     expect(setProgress).toHaveBeenLastCalledWith(false);
   });
 
+  it('shows retry status while compaction is waiting to retry', () => {
+    vi.useFakeTimers();
+    try {
+      const { driver, state } = makeDriverWithTerminalProgress();
+      state.appState.isCompacting = true;
+      state.appState.retryStatus = {
+        failedAttempt: 1,
+        nextAttempt: 2,
+        maxAttempts: 5,
+        delayMs: 1_500,
+        errorName: 'APIStatusError',
+        errorMessage: 'Provider overloaded',
+        statusCode: 429,
+      };
+
+      driver.updateActivityPane();
+
+      expect(state.activitySpinner).not.toBeNull();
+      expect(strip(state.activitySpinner!.renderInline())).toContain('compaction');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps terminal progress active without showing a thinking spinner', () => {
     vi.useFakeTimers();
     try {

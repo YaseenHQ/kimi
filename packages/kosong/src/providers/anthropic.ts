@@ -1128,7 +1128,7 @@ export class AnthropicChatProvider implements ChatProvider {
     return resolveAuthBackedClient(
       { cachedClient: this._client, clientFactory: this._clientFactory },
       auth,
-      (a) => this._buildClient(this._requireApiKey(a), a?.headers),
+      (a) => this._buildClient(this._requireApiKey(a), a),
     );
   }
 
@@ -1180,10 +1180,10 @@ export class AnthropicChatProvider implements ChatProvider {
   // test/e2e/anthropic-adapter.test.ts.
   private _buildClient(
     apiKey: string,
-    requestHeaders?: Record<string, string>,
+    auth?: ProviderRequestAuth,
   ): Anthropic {
     const normalizedRequestHeaders = Object.fromEntries(
-      Object.entries(requestHeaders ?? {}).map(([name, value]) => [name.toLowerCase(), value]),
+      Object.entries(auth?.headers ?? {}).map(([name, value]) => [name.toLowerCase(), value]),
     );
     const authorization = normalizedRequestHeaders['authorization'];
     const usesBearerAuth = authorization?.toLowerCase().startsWith('bearer ') === true;
@@ -1197,7 +1197,7 @@ export class AnthropicChatProvider implements ChatProvider {
     return new Anthropic({
       apiKey: usesBearerAuth ? null : apiKey,
       authToken: usesBearerAuth ? apiKey : null,
-      baseURL: this._baseUrl ?? null,
+      baseURL: auth?.baseUrl ?? this._baseUrl ?? null,
       defaultHeaders,
     });
   }

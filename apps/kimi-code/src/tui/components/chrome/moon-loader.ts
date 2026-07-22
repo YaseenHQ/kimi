@@ -63,7 +63,7 @@ export class MoonLoader extends Text {
     this.updateDisplay();
   }
 
-  setColorFn(colorFn: (s: string) => string): void {
+  setColorFn(colorFn: ((s: string) => string) | undefined): void {
     this.colorFn = colorFn;
     this.updateDisplay();
   }

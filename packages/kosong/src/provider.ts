@@ -128,6 +128,8 @@ export interface ProviderRequestAuth {
   apiKey?: string;
   /** Request-scoped headers. These override constructor-level default headers. */
   headers?: Record<string, string>;
+  /** Request-scoped endpoint, for OAuth providers whose token selects a proxy host. */
+  baseUrl?: string;
 }
 
 export interface GenerateOptions {

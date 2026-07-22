@@ -138,6 +138,7 @@ export function runOAuthCallbackServer(options: CallbackServerOptions): Promise<
 
   return new Promise<CallbackServerHandle>((resolve, reject) => {
     const servers: Server[] = [];
+    let listening = 0;
     let pending = bindHosts.length;
     let firstError: Error | undefined;
     let resolved = false;
@@ -154,7 +155,8 @@ export function runOAuthCallbackServer(options: CallbackServerOptions): Promise<
 
     const maybeResolve = (): void => {
       if (resolved) return;
-      if (servers.length > 0) {
+      if (pending !== 0) return;
+      if (listening > 0) {
         resolved = true;
         const redirectUri = `http://localhost:${options.port}${options.path}`;
         resolve({
@@ -165,7 +167,8 @@ export function runOAuthCallbackServer(options: CallbackServerOptions): Promise<
           },
           close: closeAll,
         });
-      } else if (pending === 0) {
+      } else {
+        closeAll();
         resolved = true;
         reject(firstError ?? new Error('Unable to start OAuth callback server.'));
       }
@@ -173,16 +176,24 @@ export function runOAuthCallbackServer(options: CallbackServerOptions): Promise<
 
     function startOneServer(host: string): void {
       const server = createServer(requestHandler);
+      servers.push(server);
+      let startupSettled = false;
+
+      const finishStartup = (ok: boolean, error?: Error): void => {
+        if (startupSettled) return;
+        startupSettled = true;
+        pending -= 1;
+        if (ok) listening += 1;
+        else firstError ??= error;
+        maybeResolve();
+      };
 
       server.on('error', (err: NodeJS.ErrnoException) => {
-        pending -= 1;
-        firstError ??= err;
-        maybeResolve();
+        finishStartup(false, err);
       });
 
       server.listen(options.port, host, () => {
-        servers.push(server);
-        maybeResolve();
+        finishStartup(true);
       });
     }
 

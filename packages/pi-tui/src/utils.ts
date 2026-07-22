@@ -347,24 +347,14 @@ export function extractAnsiCode(str: string, pos: number): { code: string; lengt
 		return null;
 	}
 
-	// OSC sequence: ESC ] ... BEL or ESC ] ... ST (ESC \)
-	// Used for hyperlinks (OSC 8), window titles, etc.
-	if (next === "]") {
+	// String sequences: OSC, DCS, SOS, PM, and APC. OSC/APC commonly accept
+	// BEL; every form accepts the standard ST terminator (ESC \).
+	if (next === "]" || next === "P" || next === "X" || next === "^" || next === "_") {
 		let j = pos + 2;
 		while (j < str.length) {
-			if (str[j] === "\x07") return { code: str.substring(pos, j + 1), length: j + 1 - pos };
-			if (str[j] === "\x1b" && str[j + 1] === "\\") return { code: str.substring(pos, j + 2), length: j + 2 - pos };
-			j++;
-		}
-		return null;
-	}
-
-	// APC sequence: ESC _ ... BEL or ESC _ ... ST (ESC \)
-	// Used for cursor marker and application-specific commands
-	if (next === "_") {
-		let j = pos + 2;
-		while (j < str.length) {
-			if (str[j] === "\x07") return { code: str.substring(pos, j + 1), length: j + 1 - pos };
+			if ((next === "]" || next === "_") && str[j] === "\x07") {
+				return { code: str.substring(pos, j + 1), length: j + 1 - pos };
+			}
 			if (str[j] === "\x1b" && str[j + 1] === "\\") return { code: str.substring(pos, j + 2), length: j + 2 - pos };
 			j++;
 		}

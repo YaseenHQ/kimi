@@ -104,6 +104,8 @@ export interface KimiOAuthLoginOptions extends LoginOptions {
   readonly oauthHost?: string | undefined;
   /** OpenAI Codex only: choose browser (PKCE + local server) vs device-code. */
   readonly method?: 'browser' | 'device_code' | undefined;
+  /** Start a fresh interactive flow even when a valid credential already exists. */
+  readonly forceLogin?: boolean | undefined;
   readonly onBrowserAuthorization?:
     | ((authorization: BrowserAuthorization) => Promise<string | undefined>)
     | undefined;
@@ -199,11 +201,16 @@ export class KimiOAuthToolkit<TConfig = unknown> {
         throw new Error('Anthropic OAuth requires a browser authorization callback.');
       }
       options.signal?.throwIfAborted();
-      await this.loginWithToken(name, { key: oauthKey, oauthHost }, async () => {
-        const token = await loginAnthropic(options.onBrowserAuthorization!, options.signal);
-        options.signal?.throwIfAborted();
-        return token;
-      });
+      await this.loginWithToken(
+        name,
+        { key: oauthKey, oauthHost },
+        async () => {
+          const token = await loginAnthropic(options.onBrowserAuthorization!, options.signal);
+          options.signal?.throwIfAborted();
+          return token;
+        },
+        { forceLogin: options.forceLogin },
+      );
       return { providerName: name, ok: true };
     }
     // OpenAI Codex browser (PKCE + local :1455 server) path. Chosen via
@@ -214,11 +221,19 @@ export class KimiOAuthToolkit<TConfig = unknown> {
         throw new Error('OpenAI Codex browser login requires a browser authorization callback.');
       }
       options.signal?.throwIfAborted();
-      await this.loginWithToken(name, { key: oauthKey, oauthHost }, async () => {
-        const token = await loginOpenAICodexBrowser(options.onBrowserAuthorization!, options.signal);
-        options.signal?.throwIfAborted();
-        return token;
-      });
+      await this.loginWithToken(
+        name,
+        { key: oauthKey, oauthHost },
+        async () => {
+          const token = await loginOpenAICodexBrowser(
+            options.onBrowserAuthorization!,
+            options.signal,
+          );
+          options.signal?.throwIfAborted();
+          return token;
+        },
+        { forceLogin: options.forceLogin },
+      );
       return { providerName: name, ok: true };
     }
     const manager = this.managerFor(name, oauthKey, oauthHost);
@@ -234,7 +249,7 @@ export class KimiOAuthToolkit<TConfig = unknown> {
       ).accessToken;
     };
     let accessToken: string;
-    if (hadToken) {
+    if (hadToken && options.forceLogin !== true) {
       try {
         accessToken = await manager.ensureFresh();
       } catch (error) {
@@ -292,11 +307,12 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     providerName: string,
     oauthRef: KimiOAuthTokenRef,
     acquire: () => Promise<import('./types').TokenInfo>,
+    options: { readonly forceLogin?: boolean | undefined } = {},
   ): Promise<void> {
     const oauthHost = this.oauthHostFor(oauthRef);
     const oauthKey = oauthRef.key ?? this.defaultOAuthKey(undefined, oauthHost);
     const manager = this.managerFor(providerName, oauthKey, oauthHost);
-    if (await manager.hasToken()) {
+    if (options.forceLogin !== true && (await manager.hasToken())) {
       try {
         await manager.ensureFresh();
         return;

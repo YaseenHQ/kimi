@@ -33,15 +33,11 @@ export async function handleLogoutCommand(host: SlashCommandHost): Promise<void>
   for (const id of Object.keys(config.providers).toSorted()) {
     if (oauthIds.has(id)) continue;
     const provider = config.providers[id];
+    if (provider?.apiKey === undefined || provider.apiKey.trim().length === 0) continue;
     options.push({
       value: id,
       label: id,
-      description:
-        provider?.apiKey !== undefined
-          ? 'API key'
-          : provider?.baseUrl !== undefined
-            ? provider.baseUrl
-            : 'Config.toml provider',
+      description: 'API key',
     });
   }
 
@@ -58,20 +54,16 @@ export async function handleLogoutCommand(host: SlashCommandHost): Promise<void>
 
   if (oauthIds.has(target)) {
     await host.harness.auth.logout(target, { deprovisionConfig: false });
-  }
-  if (config.providers[target] !== undefined) {
-    await host.harness.removeProvider(target);
-  }
-
-  if (target === currentProvider) {
-    await host.authFlow.refreshConfigAfterLogout();
-    await host.authFlow.clearActiveSessionAfterLogout();
   } else {
-    const updated = await host.harness.getConfig({ reload: true });
-    host.setAppState({
-      availableModels: updated.models ?? {},
-      availableProviders: updated.providers ?? {},
+    await host.harness.setConfig({
+      providers: {
+        [target]: { ...config.providers[target], apiKey: '' },
+      },
     });
+    await host.authFlow.refreshConfigAfterLogout();
+  }
+  if (target === currentProvider && !oauthIds.has(target)) {
+    await host.authFlow.clearActiveSessionAfterLogout();
   }
 
   host.track('logout', { provider: target });

@@ -10,7 +10,9 @@ import {
   anthropicOAuthRequestHeaders,
   GITHUB_COPILOT_OAUTH_KEY,
   GITHUB_COPILOT_PROVIDER_NAME,
+  githubCopilotApiBaseUrl,
   githubCopilotRequestHeaders,
+  normalizeGitHubDomain,
   KIMI_CODE_PROVIDER_NAME,
   KimiOAuthToolkit,
   OPENAI_CODEX_OAUTH_KEY,
@@ -155,9 +157,10 @@ class ServicesManagedAuthFacade implements ServicesAuthFacade {
     providerName: string,
     oauthRef?: OAuthRef | undefined,
   ): BearerTokenProvider => {
+    const runtimeRef = this.runtimeOAuthRef(providerName, oauthRef);
     const provider = this.toolkit.tokenProvider(
       providerName,
-      this.runtimeOAuthRef(providerName, oauthRef),
+      runtimeRef,
     );
     return {
       getAccessToken: (options) => provider.getAccessToken(options),
@@ -170,7 +173,12 @@ class ServicesManagedAuthFacade implements ServicesAuthFacade {
           return { apiKey, headers: anthropicOAuthRequestHeaders(apiKey) };
         }
         if (providerName === GITHUB_COPILOT_PROVIDER_NAME) {
-          return { apiKey, headers: githubCopilotRequestHeaders(apiKey) };
+          const enterpriseDomain = normalizeGitHubDomain(runtimeRef?.oauthHost) ?? undefined;
+          return {
+            apiKey,
+            headers: githubCopilotRequestHeaders(apiKey),
+            baseUrl: githubCopilotApiBaseUrl(apiKey, enterpriseDomain),
+          };
         }
         return { apiKey };
       },

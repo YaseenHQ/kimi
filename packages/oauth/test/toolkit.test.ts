@@ -108,6 +108,41 @@ describe('resolveKimiTokenStorageName', () => {
 });
 
 describe('KimiOAuthToolkit', () => {
+  it('replaces an existing token only after a forced token flow succeeds', async () => {
+    const storage = new MemoryTokenStorage();
+    storage.tokens.set('anthropic', token('old-access'));
+    const toolkit = new KimiOAuthToolkit({ storage, now: () => 100 });
+
+    const acquire = vi.fn(async () => token('new-access'));
+    await toolkit.loginWithToken(
+      ANTHROPIC_PROVIDER_NAME,
+      { key: 'oauth/anthropic' },
+      acquire,
+      { forceLogin: true },
+    );
+
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(storage.tokens.get('anthropic')?.accessToken).toBe('new-access');
+  });
+
+  it('preserves the existing token when a forced token flow fails', async () => {
+    const storage = new MemoryTokenStorage();
+    storage.tokens.set('anthropic', token('old-access'));
+    const toolkit = new KimiOAuthToolkit({ storage, now: () => 100 });
+
+    await expect(
+      toolkit.loginWithToken(
+        ANTHROPIC_PROVIDER_NAME,
+        { key: 'oauth/anthropic' },
+        async () => {
+          throw new Error('cancelled');
+        },
+        { forceLogin: true },
+      ),
+    ).rejects.toThrow('cancelled');
+    expect(storage.tokens.get('anthropic')?.accessToken).toBe('old-access');
+  });
+
   it('can be constructed without host identity', async () => {
     const storage = new MemoryTokenStorage();
     storage.tokens.set('kimi-code', token('access-1'));

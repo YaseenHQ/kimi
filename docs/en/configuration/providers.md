@@ -27,7 +27,9 @@ Run `/login` to open the shared provider setup flow directly, or `/provider` to 
 - **API Key**: connect either Kimi Platform region or choose a known provider from the [models.dev](https://models.dev/) catalog.
 - **Config.toml**: import providers and models from a custom `api.json` registry into `config.toml`.
 
-OAuth tokens are stored separately from `config.toml`; the provider's OAuth reference and catalog-derived model metadata remain in the normal Kimi configuration format. `/logout` removes the selected credential and its provider/model entries while preserving every unrelated provider. The same complete removal is available with `d` in `/provider`.
+OAuth tokens are stored separately from `config.toml`; the provider's OAuth reference and catalog-derived model metadata remain in the normal Kimi configuration format. `/logout` clears only the selected OAuth token or API key, preserving its provider/model configuration and saved sessions. An active OAuth session remains open; an active API-key session is closed so it cannot retain the cleared key in memory. To remove the provider and its models completely, press `d` in `/provider`.
+
+Kimi Code currently stores one OAuth account per provider. Running `/login` for a connected provider lets you keep the current account or choose **Switch account**. A switch replaces the stored credential only after the new login succeeds, so cancelling or failing the flow leaves the current account usable.
 
 The manager displays providers as a list of entries grouped by source. Navigation:
 

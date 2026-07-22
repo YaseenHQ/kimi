@@ -31,6 +31,7 @@ function makeHost() {
       })),
       logout: vi.fn(async () => ({ ok: true })),
     },
+    setConfig: vi.fn(async () => undefined),
     removeProvider: vi.fn(async () => undefined),
   };
   const host = {
@@ -57,7 +58,7 @@ describe('/logout', () => {
     promptState.selected = undefined;
   });
 
-  it('removes both the OAuth credential and Kimi provider config for the active provider', async () => {
+  it('removes only the OAuth credential and preserves the active session config', async () => {
     const { host, harness } = makeHost();
     promptState.selected = 'anthropic';
 
@@ -66,25 +67,26 @@ describe('/logout', () => {
     expect(harness.auth.logout).toHaveBeenCalledWith('anthropic', {
       deprovisionConfig: false,
     });
-    expect(harness.removeProvider).toHaveBeenCalledWith('anthropic');
-    expect(host.authFlow.refreshConfigAfterLogout).toHaveBeenCalledOnce();
-    expect(host.authFlow.clearActiveSessionAfterLogout).toHaveBeenCalledOnce();
+    expect(harness.removeProvider).not.toHaveBeenCalled();
+    expect(host.authFlow.refreshConfigAfterLogout).not.toHaveBeenCalled();
+    expect(host.authFlow.clearActiveSessionAfterLogout).not.toHaveBeenCalled();
     expect(host.showStatus).toHaveBeenCalledWith('Logged out from Anthropic.');
   });
 
-  it('removes an API-key provider without clearing a different active session', async () => {
-    const { host, harness, updated } = makeHost();
+  it('clears an API key without removing its provider or a different active session', async () => {
+    const { host, harness } = makeHost();
     promptState.selected = 'qwen';
 
     await handleLogoutCommand(host);
 
     expect(harness.auth.logout).not.toHaveBeenCalled();
-    expect(harness.removeProvider).toHaveBeenCalledWith('qwen');
-    expect(host.authFlow.clearActiveSessionAfterLogout).not.toHaveBeenCalled();
-    expect(harness.getConfig).toHaveBeenLastCalledWith({ reload: true });
-    expect(host.setAppState).toHaveBeenCalledWith({
-      availableModels: updated.models,
-      availableProviders: updated.providers,
+    expect(harness.removeProvider).not.toHaveBeenCalled();
+    expect(harness.setConfig).toHaveBeenCalledWith({
+      providers: {
+        qwen: { type: 'anthropic', baseUrl: 'https://example.test', apiKey: '' },
+      },
     });
+    expect(host.authFlow.clearActiveSessionAfterLogout).not.toHaveBeenCalled();
+    expect(host.authFlow.refreshConfigAfterLogout).toHaveBeenCalledOnce();
   });
 });

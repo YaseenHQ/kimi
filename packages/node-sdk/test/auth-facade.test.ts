@@ -462,6 +462,7 @@ oauth = { storage = "file", key = "${oauthKey}", oauth_host = "https://auth.dev.
       .getRequestAuth?.();
     expect(copilot).toMatchObject({
       apiKey: 'copilot-token',
+      baseUrl: expect.stringContaining('githubcopilot.com'),
       headers: {
         Authorization: 'Bearer copilot-token',
         'Copilot-Integration-Id': 'vscode-chat',

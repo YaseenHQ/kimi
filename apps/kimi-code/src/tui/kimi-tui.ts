@@ -2485,7 +2485,9 @@ export class KimiTUI {
   private resolveActivityPaneMode(): EffectiveActivityPaneMode {
     if (this.state.activeDialog === 'session-picker') return 'hidden';
     if (this.state.livePane.pendingApproval !== null) return 'hidden';
-    if (this.state.appState.isCompacting) return 'hidden';
+    if (this.state.appState.isCompacting) {
+      return this.state.appState.retryStatus === undefined ? 'hidden' : 'waiting';
+    }
     if (this.state.livePane.pendingQuestion !== null) return 'hidden';
 
     const streamingPhase = this.state.appState.streamingPhase;
@@ -2752,9 +2754,7 @@ export class KimiTUI {
     }
 
     this.state.activitySpinner.setLabel(label);
-    if (colorFn !== undefined) {
-      this.state.activitySpinner.setColorFn(colorFn);
-    }
+    this.state.activitySpinner.setColorFn(colorFn);
     return this.state.activitySpinner;
   }
 

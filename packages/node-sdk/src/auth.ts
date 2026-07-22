@@ -17,7 +17,6 @@ import {
   GITHUB_COPILOT_PROVIDER_NAME,
   enableGitHubCopilotModelsForIds,
   fetchGitHubCopilotModelIds,
-  fetchGitHubCopilotRawModelIds,
   githubCopilotApiBaseUrl,
   normalizeGitHubDomain,
   githubCopilotRequestHeaders,
@@ -308,9 +307,10 @@ export class KimiAuthFacade {
     providerName: string,
     oauthRef?: OAuthRef | undefined,
   ): BearerTokenProvider => {
+    const runtimeRef = this.runtimeOAuthRef(providerName, oauthRef);
     const provider = this.toolkit.tokenProvider(
       providerName,
-      this.runtimeOAuthRef(providerName, oauthRef),
+      runtimeRef,
     );
     const getAccessToken = async (options?: { readonly force?: boolean }): Promise<string> => {
       try {
@@ -332,7 +332,12 @@ export class KimiAuthFacade {
           return { apiKey, headers: anthropicOAuthRequestHeaders(apiKey) };
         }
         if (providerName === GITHUB_COPILOT_PROVIDER_NAME) {
-          return { apiKey, headers: githubCopilotRequestHeaders(apiKey) };
+          const enterpriseDomain = normalizeGitHubDomain(runtimeRef?.oauthHost) ?? undefined;
+          return {
+            apiKey,
+            headers: githubCopilotRequestHeaders(apiKey),
+            baseUrl: githubCopilotApiBaseUrl(apiKey, enterpriseDomain),
+          };
         }
         return { apiKey };
       },
@@ -444,12 +449,13 @@ export class KimiAuthFacade {
         // fresh token, so proxy-ep rotation does not strand requests.
         providerBaseUrl = githubCopilotApiBaseUrl(accessToken, enterpriseDomain);
         try {
-          // Policy enablement MUST run before discovery filtering: the
-          // discovery call drops models whose policy.state === 'disabled', so
-          // enabling after would never flip gated models (Claude/Grok on
-          // Copilot) into the provisioned set. Best-effort over the raw list.
-          const rawIds = await fetchGitHubCopilotRawModelIds(accessToken, enterpriseDomain, options.signal);
-          await enableGitHubCopilotModelsForIds(accessToken, rawIds, enterpriseDomain);
+          // Enable only catalog-known ids. Never mutate policy for arbitrary
+          // model ids returned by the remote discovery endpoint.
+          await enableGitHubCopilotModelsForIds(
+            accessToken,
+            models.map((model) => model.id),
+            enterpriseDomain,
+          );
           const available = new Set(
             await fetchGitHubCopilotModelIds(accessToken, options.signal, enterpriseDomain),
           );
@@ -467,13 +473,8 @@ export class KimiAuthFacade {
     const config = readConfigFileForUpdate(this.options.configPath);
     config.providers[providerName] = {
       type: resolution.wire,
-      // Copilot baseUrl is the proxy-ep-derived URL (or enterprise host),
-      // fixed at login time. The runtime does NOT re-derive it per request —
-      // getRequestAuth returns only { apiKey, headers }, so requests use this
-      // persisted value. Residual risk: if proxy-ep rotates on a mid-session
-      // token refresh, requests strand on the old proxy until re-login. A
-      // full fix needs ProviderRequestAuth to carry a per-request baseUrl
-      // (kosong change, tracked separately).
+      // Persist a usable initial endpoint; request auth re-derives it from the
+      // current token so a refreshed proxy-ep takes effect without re-login.
       baseUrl: providerBaseUrl,
       // Persist the enterprise host (GHES) on the oauth ref so device-auth and
       // token refresh hit the enterprise endpoints on every subsequent session.

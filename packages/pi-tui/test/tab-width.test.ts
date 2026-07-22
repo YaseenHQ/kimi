@@ -62,6 +62,9 @@ describe("tab width accounting", () => {
 			"\x1b]8;;https://example.test/a\tb\x07",
 			"\x1b]0;window\ttitle\x1b\\",
 			"\x1b_payload\tdata\x1b\\",
+			"\x1bPpayload\tdata\x1b\\",
+			"\x1b^private\tmessage\x1b\\",
+			"\x1bXstart\tof\tstring\x1b\\",
 		];
 
 		for (const controlSequence of controlSequences) {

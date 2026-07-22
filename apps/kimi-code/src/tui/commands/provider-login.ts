@@ -20,6 +20,7 @@ import type { SlashCommandHost } from './dispatch';
 import {
   promptApiKey,
   promptModelSelectionForOpenPlatform,
+  promptExistingOAuthAction,
   promptOAuthAuthorizationCode,
   promptOpenAICodexLoginMethod,
 } from './prompts';
@@ -66,6 +67,11 @@ export async function handleOAuthLogin(
   const alreadyLoggedIn = status.providers.some(
     (entry) => entry.providerName === provider.id && entry.hasToken,
   );
+  const existingAction = alreadyLoggedIn
+    ? await promptExistingOAuthAction(host, provider.label)
+    : undefined;
+  if (alreadyLoggedIn && existingAction === undefined) return;
+  const forceLogin = existingAction === 'switch';
 
   let spinner: LoginProgressSpinnerHandle | undefined;
   const controller = new AbortController();
@@ -76,13 +82,14 @@ export async function handleOAuthLogin(
   try {
     // OpenAI Codex offers browser (PKCE + local server) or device-code.
     let method: 'browser' | 'device_code' | undefined;
-    if (provider.id === OPENAI_CODEX_PROVIDER_NAME) {
+    if (provider.id === OPENAI_CODEX_PROVIDER_NAME && (!alreadyLoggedIn || forceLogin)) {
       method = await promptOpenAICodexLoginMethod(host);
       if (method === undefined) return;
     }
     await host.harness.auth.login(provider.id, {
       signal: controller.signal,
       method,
+      forceLogin,
       onDeviceCode: (data) => {
         spinner = host.showLoginAuthorizationPrompt(data);
       },
@@ -103,7 +110,9 @@ export async function handleOAuthLogin(
       method: 'oauth',
       already_logged_in: alreadyLoggedIn,
     });
-    if (alreadyLoggedIn) {
+    if (forceLogin) {
+      host.showStatus(`Switched ${provider.label} account.`);
+    } else if (alreadyLoggedIn) {
       host.showStatus('Already logged in. Model configuration refreshed.');
     }
   } catch (error) {

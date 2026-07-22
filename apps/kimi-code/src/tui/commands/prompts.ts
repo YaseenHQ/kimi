@@ -43,6 +43,39 @@ export function promptLogoutProviderSelection(
   });
 }
 
+export function promptExistingOAuthAction(
+  host: SlashCommandHost,
+  providerName: string,
+): Promise<'current' | 'switch' | undefined> {
+  return new Promise((resolve) => {
+    const picker = new ChoicePickerComponent({
+      title: `${providerName} is already connected`,
+      options: [
+        {
+          value: 'current',
+          label: 'Use current account',
+          description: 'Keep this account and refresh its model configuration.',
+        },
+        {
+          value: 'switch',
+          label: 'Switch account',
+          description: 'Sign in again; the current credential is kept if login fails.',
+        },
+      ],
+      currentValue: 'current',
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(value as 'current' | 'switch');
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(undefined);
+      },
+    });
+    host.mountEditorReplacement(picker);
+  });
+}
+
 export interface FeedbackPromptResult {
   readonly value: string;
 }
