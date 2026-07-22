@@ -1128,7 +1128,7 @@ export class AnthropicChatProvider implements ChatProvider {
     return resolveAuthBackedClient(
       { cachedClient: this._client, clientFactory: this._clientFactory },
       auth,
-      (a) => this._buildClient(this._requireApiKey(a)),
+      (a) => this._buildClient(this._requireApiKey(a), a?.headers),
     );
   }
 
@@ -1178,12 +1178,27 @@ export class AnthropicChatProvider implements ChatProvider {
   // These `null`s — and the nulled headers in _buildDefaultHeaders — are NOT
   // redundant: removing them reintroduces credential leakage. Regression cover:
   // test/e2e/anthropic-adapter.test.ts.
-  private _buildClient(apiKey: string): Anthropic {
+  private _buildClient(
+    apiKey: string,
+    requestHeaders?: Record<string, string>,
+  ): Anthropic {
+    const normalizedRequestHeaders = Object.fromEntries(
+      Object.entries(requestHeaders ?? {}).map(([name, value]) => [name.toLowerCase(), value]),
+    );
+    const authorization = normalizedRequestHeaders['authorization'];
+    const usesBearerAuth = authorization?.toLowerCase().startsWith('bearer ') === true;
+    const defaultHeaders = mergeRequestHeaders(
+      this._buildDefaultHeaders(apiKey) as Record<string, string>,
+      normalizedRequestHeaders,
+    ) as Record<string, string | null> | undefined;
+    if (usesBearerAuth && defaultHeaders !== undefined) {
+      defaultHeaders['x-api-key'] = null;
+    }
     return new Anthropic({
-      apiKey,
-      authToken: null,
+      apiKey: usesBearerAuth ? null : apiKey,
+      authToken: usesBearerAuth ? apiKey : null,
       baseURL: this._baseUrl ?? null,
-      defaultHeaders: this._buildDefaultHeaders(apiKey),
+      defaultHeaders,
     });
   }
 

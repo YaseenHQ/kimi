@@ -14,6 +14,10 @@ import { ErrorCodes, isKimiError, KimiError } from '../errors';
 
 export interface BearerTokenProvider {
   getAccessToken(options?: { readonly force?: boolean }): Promise<string>;
+  /** Resolve provider-specific request headers alongside the bearer token. */
+  getRequestAuth?(
+    options?: { readonly force?: boolean },
+  ): Promise<ProviderRequestAuth>;
 }
 
 export type OAuthTokenProviderResolver = (
@@ -126,6 +130,7 @@ export class ProviderManager implements ModelProvider {
       providerConfig,
       alias.model,
       alias.protocol,
+      alias.wire,
       alias.baseUrl,
       this.options.kimiRequestHeaders,
       effectiveAlias.maxOutputSize,
@@ -186,9 +191,16 @@ export class ProviderManager implements ModelProvider {
 
     const log = options?.log;
     const fetchAuth = async (force: boolean): Promise<ProviderRequestAuth> => {
-      let apiKey: string;
+      let auth: ProviderRequestAuth;
       try {
-        apiKey = await tokenProvider.getAccessToken(force ? { force: true } : undefined);
+        auth =
+          tokenProvider.getRequestAuth === undefined
+            ? {
+                apiKey: await tokenProvider.getAccessToken(
+                  force ? { force: true } : undefined,
+                ),
+              }
+            : await tokenProvider.getRequestAuth(force ? { force: true } : undefined);
       } catch (error) {
         // login-required is an expected state (the user must /login); don't
         // warn. Other failures (connection errors, etc.) are logged once for
@@ -198,8 +210,8 @@ export class ProviderManager implements ModelProvider {
         }
         throw error;
       }
-      if (apiKey.trim().length === 0) throw loginRequired();
-      return { apiKey };
+      if (auth.apiKey === undefined || auth.apiKey.trim().length === 0) throw loginRequired();
+      return auth;
     };
 
     return async (request) => {
@@ -255,6 +267,7 @@ function toKosongProviderConfig(
   provider: ProviderConfig,
   model: string,
   modelProtocol: ModelAlias['protocol'],
+  modelWire: ModelAlias['wire'],
   modelBaseUrl: string | undefined,
   kimiRequestHeaders: Record<string, string> | undefined,
   maxOutputSize: number | undefined,
@@ -265,7 +278,7 @@ function toKosongProviderConfig(
   adaptiveThinking: boolean | undefined,
   betaApi: boolean | undefined,
 ): KosongProviderConfig {
-  const effectiveType = modelProtocol === 'anthropic' ? 'anthropic' : provider.type;
+  const effectiveType = modelWire ?? (modelProtocol === 'anthropic' ? 'anthropic' : provider.type);
   const envCustomHeaders = parseKimiCodeCustomHeaders();
   switch (effectiveType) {
     case 'anthropic': {

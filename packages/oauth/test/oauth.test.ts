@@ -8,7 +8,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   OAuthConnectionError,
@@ -23,7 +23,21 @@ import {
   type RefreshOptions,
 } from '../src/oauth';
 import { KIMI_CODE_PLATFORM } from '../src/identity';
+import {
+  OPENAI_CODEX_OAUTH_FLOW_CONFIG,
+  applyOpenAICodexConfig,
+  openAICodexRequestHeaders,
+  pollOpenAICodexDeviceToken,
+  refreshOpenAICodexAccessToken,
+  requestOpenAICodexDeviceAuthorization,
+} from '../src/openai-codex';
 import type { DeviceHeaders, OAuthFlowConfig } from '../src/types';
+import {
+  pollXaiDeviceToken,
+  refreshXaiAccessToken,
+  requestXaiDeviceAuthorization,
+  XAI_OAUTH_FLOW_CONFIG,
+} from '../src/xai';
 
 interface FakeResponse {
   status: number;
@@ -170,7 +184,222 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await server.stop();
+});
+
+describe('OpenAI Codex OAuth protocol adapter', () => {
+  it('exchanges the two-stage device flow for a persisted token', async () => {
+    const responses = [
+      new Response(
+        JSON.stringify({
+          device_auth_id: 'device-auth',
+          user_code: 'OPENAI-CODE',
+          interval: 1,
+        }),
+        { status: 200 },
+      ),
+      new Response(
+        JSON.stringify({ authorization_code: 'authorization', code_verifier: 'verifier' }),
+        { status: 200 },
+      ),
+      new Response(
+        JSON.stringify({
+          access_token: 'header.payload.signature',
+          refresh_token: 'codex-refresh',
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      ),
+    ];
+    const fetchMock = vi.fn(async (_input: unknown, _init?: RequestInit) => responses.shift()!);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const device = await requestOpenAICodexDeviceAuthorization(
+      OPENAI_CODEX_OAUTH_FLOW_CONFIG,
+    );
+    expect(device).toMatchObject({
+      userCode: 'OPENAI-CODE',
+      verificationUri: 'https://auth.openai.com/codex/device',
+      expiresIn: 900,
+      interval: 1,
+    });
+    await expect(
+      pollOpenAICodexDeviceToken(OPENAI_CODEX_OAUTH_FLOW_CONFIG, device.deviceCode),
+    ).resolves.toMatchObject({
+      kind: 'success',
+      token: { accessToken: 'header.payload.signature', refreshToken: 'codex-refresh' },
+    });
+
+    const exchangeBody = fetchMock.mock.calls[2]?.[1]?.body;
+    expect(exchangeBody).toBeInstanceOf(URLSearchParams);
+    expect((exchangeBody as URLSearchParams).get('redirect_uri')).toBe(
+      'https://auth.openai.com/deviceauth/callback',
+    );
+  });
+
+  it('maps pending device authorization and refresh-token rotation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 403 })),
+    );
+    const state = Buffer.from(
+      JSON.stringify({ deviceAuthId: 'device-auth', userCode: 'OPENAI-CODE' }),
+    ).toString('base64url');
+    await expect(
+      pollOpenAICodexDeviceToken(OPENAI_CODEX_OAUTH_FLOW_CONFIG, state),
+    ).resolves.toEqual({
+      kind: 'pending',
+      errorCode: 'authorization_pending',
+      description: '',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ access_token: 'rotated', expires_in: 3600 }), {
+          status: 200,
+        }),
+      ),
+    );
+    await expect(
+      refreshOpenAICodexAccessToken(OPENAI_CODEX_OAUTH_FLOW_CONFIG, 'existing-refresh'),
+    ).resolves.toMatchObject({
+      accessToken: 'rotated',
+      refreshToken: 'existing-refresh',
+    });
+  });
+
+  it('derives ChatGPT account headers and applies Pi codex model metadata', () => {
+    const payload = Buffer.from(
+      JSON.stringify({
+        'https://api.openai.com/auth': { chatgpt_account_id: 'account-123' },
+      }),
+    ).toString('base64url');
+    expect(openAICodexRequestHeaders(`header.${payload}.signature`)).toEqual({
+      'chatgpt-account-id': 'account-123',
+      originator: 'kimi-code',
+      'OpenAI-Beta': 'responses=experimental',
+    });
+
+    const config = { providers: {} };
+    expect(applyOpenAICodexConfig(config)).toEqual({
+      defaultModel: 'openai-codex/gpt-5.4',
+      defaultThinking: true,
+    });
+    expect(config).toMatchObject({
+      providers: {
+        'openai-codex': {
+          type: 'openai_responses',
+          baseUrl: 'https://chatgpt.com/backend-api/codex',
+          oauth: { storage: 'file', key: 'oauth/openai-codex' },
+        },
+      },
+      models: {
+        'openai-codex/gpt-5.6-sol': {
+          maxContextSize: 272000,
+          maxOutputSize: 128000,
+          supportEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        },
+      },
+    });
+  });
+});
+
+describe('xAI OAuth protocol adapter', () => {
+  it('adapts device authorization to Kimi OAuthManager input', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(init?.body).toBeInstanceOf(URLSearchParams);
+      const body = init?.body instanceof URLSearchParams ? init.body.toString() : '';
+      expect(body).toContain(`client_id=${XAI_OAUTH_FLOW_CONFIG.clientId}`);
+      expect(body).toContain('referrer=pi');
+      return new Response(
+        JSON.stringify({
+          device_code: 'xai-device',
+          user_code: 'XAI-CODE',
+          verification_uri: 'https://auth.x.ai/device',
+          expires_in: 600,
+          interval: 3,
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(requestXaiDeviceAuthorization(XAI_OAUTH_FLOW_CONFIG)).resolves.toEqual({
+      deviceCode: 'xai-device',
+      userCode: 'XAI-CODE',
+      verificationUri: 'https://auth.x.ai/device',
+      verificationUriComplete: 'https://auth.x.ai/device',
+      expiresIn: 600,
+      interval: 3,
+    });
+  });
+
+  it('maps pending and successful device-token responses', async () => {
+    const responses = [
+      new Response(JSON.stringify({ error: 'authorization_pending' }), { status: 400 }),
+      new Response(
+        JSON.stringify({
+          access_token: 'xai-access',
+          refresh_token: 'xai-refresh',
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      ),
+    ];
+    vi.stubGlobal('fetch', vi.fn(async () => responses.shift()!));
+
+    await expect(pollXaiDeviceToken(XAI_OAUTH_FLOW_CONFIG, 'device')).resolves.toEqual({
+      kind: 'pending',
+      errorCode: 'authorization_pending',
+      description: '',
+    });
+    const success = await pollXaiDeviceToken(XAI_OAUTH_FLOW_CONFIG, 'device');
+    expect(success).toMatchObject({
+      kind: 'success',
+      token: { accessToken: 'xai-access', refreshToken: 'xai-refresh' },
+    });
+  });
+
+  it('retains the prior refresh token when xAI does not rotate it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ access_token: 'rotated', expires_in: 3600 }), {
+          status: 200,
+        }),
+      ),
+    );
+
+    await expect(
+      refreshXaiAccessToken(XAI_OAUTH_FLOW_CONFIG, 'existing-refresh'),
+    ).resolves.toMatchObject({
+      accessToken: 'rotated',
+      refreshToken: 'existing-refresh',
+    });
+  });
+
+  it('rejects non-HTTPS verification URLs', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            device_code: 'xai-device',
+            user_code: 'XAI-CODE',
+            verification_uri: 'file:///tmp/untrusted',
+            expires_in: 600,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await expect(requestXaiDeviceAuthorization(XAI_OAUTH_FLOW_CONFIG)).rejects.toThrow(
+      /untrusted verification URL/,
+    );
+  });
 });
 
 // ── requestDeviceAuthorization ────────────────────────────────────────

@@ -47,6 +47,17 @@ export interface CompactionStartedEvent {
   readonly instruction?: string;
 }
 
+export interface CompactionRetryingEvent {
+  readonly type: 'compaction.retrying';
+  readonly failedAttempt: number;
+  readonly nextAttempt: number;
+  readonly maxAttempts: number;
+  readonly delayMs: number;
+  readonly errorName: string;
+  readonly errorMessage: string;
+  readonly statusCode?: number;
+}
+
 export interface CompactionBlockedEvent {
   readonly type: 'compaction.blocked';
   readonly turnId?: number;
@@ -74,6 +85,7 @@ export const CompactionModel = defineModel<CompactionState>('fullCompaction', ()
 declare module '#/app/event/eventBus' {
   interface DomainEventMap {
     'compaction.started': CompactionStartedEvent;
+    'compaction.retrying': CompactionRetryingEvent;
     'compaction.blocked': CompactionBlockedEvent;
     'compaction.cancelled': CompactionCancelledEvent;
     'compaction.completed': CompactionCompletedEvent;

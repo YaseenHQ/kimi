@@ -92,6 +92,7 @@ export type {
 // Compaction lifecycle events and compaction result payload.
 export type {
   CompactionStartedEvent,
+  CompactionRetryingEvent,
   CompactionBlockedEvent,
   CompactionCancelledEvent,
   CompactionCompletedEvent,

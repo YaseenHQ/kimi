@@ -17,6 +17,65 @@ export type {
 } from './types';
 export { tokenFromWire, tokenToWire } from './types';
 
+export { generatePKCE } from './pkce';
+
+export { oauthErrorHtml, oauthSuccessHtml } from './oauth-page';
+
+export { runOAuthCallbackServer } from './callback-server';
+export type { CallbackResult, CallbackServerHandle, CallbackServerOptions } from './callback-server';
+
+export {
+  OPENAI_CODEX_API_BASE_URL,
+  OPENAI_CODEX_OAUTH_FLOW_CONFIG,
+  OPENAI_CODEX_OAUTH_KEY,
+  OPENAI_CODEX_PROVIDER_NAME,
+  applyOpenAICodexConfig,
+  loginOpenAICodexBrowser,
+  openAICodexRequestHeaders,
+  pollOpenAICodexDeviceToken,
+  refreshOpenAICodexAccessToken,
+  requestOpenAICodexDeviceAuthorization,
+} from './openai-codex';
+export type { OpenAICodexConfigShape } from './openai-codex';
+
+export {
+  ANTHROPIC_API_BASE_URL,
+  ANTHROPIC_OAUTH_KEY,
+  ANTHROPIC_PROVIDER_NAME,
+  anthropicOAuthRequestHeaders,
+  loginAnthropic,
+  refreshAnthropicAccessToken,
+} from './anthropic';
+export type { BrowserAuthorization } from './anthropic';
+
+export {
+  GITHUB_COPILOT_API_BASE_URL,
+  GITHUB_COPILOT_OAUTH_FLOW_CONFIG,
+  GITHUB_COPILOT_OAUTH_KEY,
+  GITHUB_COPILOT_PROVIDER_NAME,
+  enableGitHubCopilotModel,
+  enableGitHubCopilotModelsForIds,
+  fetchGitHubCopilotModelIds,
+  fetchGitHubCopilotRawModelIds,
+  githubCopilotApiBaseUrl,
+  githubCopilotRequestHeaders,
+  normalizeGitHubDomain,
+  pollGitHubCopilotDeviceToken,
+  refreshGitHubCopilotAccessToken,
+  requestGitHubCopilotDeviceAuthorization,
+} from './github-copilot';
+
+export {
+  XAI_API_BASE_URL,
+  XAI_OAUTH_KEY,
+  pollXaiDeviceToken,
+  refreshXaiAccessToken,
+  requestXaiDeviceAuthorization,
+  xaiWireTypeForModel,
+  XAI_OAUTH_FLOW_CONFIG,
+  XAI_PROVIDER_NAME,
+} from './xai';
+
 export type { TokenStorage } from './storage';
 export { FileTokenStorage } from './storage';
 

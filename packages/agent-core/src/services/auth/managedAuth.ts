@@ -4,10 +4,22 @@ import type { OAuthTokenProviderResolver } from '../../session/provider-manager'
 import {
   applyManagedKimiCodeConfig,
   applyManagedKimiCodeLogoutConfig,
+  applyOpenAICodexConfig,
+  ANTHROPIC_OAUTH_KEY,
+  ANTHROPIC_PROVIDER_NAME,
+  anthropicOAuthRequestHeaders,
+  GITHUB_COPILOT_OAUTH_KEY,
+  GITHUB_COPILOT_PROVIDER_NAME,
+  githubCopilotRequestHeaders,
   KIMI_CODE_PROVIDER_NAME,
   KimiOAuthToolkit,
+  OPENAI_CODEX_OAUTH_KEY,
+  OPENAI_CODEX_PROVIDER_NAME,
+  openAICodexRequestHeaders,
   resolveKimiCodeLoginAuth,
   resolveKimiCodeRuntimeAuth,
+  XAI_OAUTH_KEY,
+  XAI_PROVIDER_NAME,
   type BearerTokenProvider,
   type KimiOAuthLoginOptions,
   type ManagedKimiConfigShape,
@@ -69,6 +81,27 @@ class ServicesManagedAuthFacade implements ServicesAuthFacade {
     providerName: string | undefined = KIMI_CODE_PROVIDER_NAME,
     options: ServicesAuthLoginOptions = {},
   ): Promise<ServicesAuthLoginResult> {
+    if (providerName === OPENAI_CODEX_PROVIDER_NAME) {
+      const oauthRef = this.resolveProviderOAuthRef(providerName);
+      await this.toolkit.login(providerName, {
+        ...options,
+        oauthRef,
+        provisionConfig: false,
+      });
+      const config = readConfigFile(this.options.configPath);
+      const provision = applyOpenAICodexConfig(config, {
+        oauthRef,
+        preserveDefaultModel: config.defaultModel !== undefined,
+      });
+      await writeConfigFile(this.options.configPath, config);
+      return {
+        providerName,
+        ok: true,
+        defaultModel: provision.defaultModel,
+        defaultThinking: provision.defaultThinking,
+        configPath: this.options.configPath,
+      };
+    }
     const auth = this.resolveManagedAuth(providerName);
     const loginAuth = resolveKimiCodeLoginAuth({
       configuredBaseUrl: auth.baseUrl,
@@ -100,7 +133,7 @@ class ServicesManagedAuthFacade implements ServicesAuthFacade {
   ): Promise<ServicesAuthLogoutResult> {
     const result = await this.toolkit.logout(
       providerName,
-      this.resolveRuntimeManagedAuth(providerName).oauthRef,
+      this.resolveProviderOAuthRef(providerName),
     );
     return {
       providerName: result.providerName,
@@ -122,10 +155,26 @@ class ServicesManagedAuthFacade implements ServicesAuthFacade {
     providerName: string,
     oauthRef?: OAuthRef | undefined,
   ): BearerTokenProvider => {
-    return this.toolkit.tokenProvider(
+    const provider = this.toolkit.tokenProvider(
       providerName,
       this.runtimeOAuthRef(providerName, oauthRef),
     );
+    return {
+      getAccessToken: (options) => provider.getAccessToken(options),
+      getRequestAuth: async (options) => {
+        const apiKey = await provider.getAccessToken(options);
+        if (providerName === OPENAI_CODEX_PROVIDER_NAME) {
+          return { apiKey, headers: openAICodexRequestHeaders(apiKey) };
+        }
+        if (providerName === ANTHROPIC_PROVIDER_NAME) {
+          return { apiKey, headers: anthropicOAuthRequestHeaders(apiKey) };
+        }
+        if (providerName === GITHUB_COPILOT_PROVIDER_NAME) {
+          return { apiKey, headers: githubCopilotRequestHeaders(apiKey) };
+        }
+        return { apiKey };
+      },
+    };
   };
 
   private resolveManagedAuth(providerName?: string | undefined): {
@@ -164,6 +213,42 @@ class ServicesManagedAuthFacade implements ServicesAuthFacade {
       configuredBaseUrl: auth.baseUrl,
       configuredOAuthRef: oauthRef ?? auth.oauthRef,
     }).oauthRef;
+  }
+
+  private resolveProviderOAuthRef(providerName?: string | undefined): OAuthRef {
+    if (providerName === OPENAI_CODEX_PROVIDER_NAME) {
+      return (
+        this.resolveManagedAuth(providerName).oauthRef ?? {
+          storage: 'file',
+          key: OPENAI_CODEX_OAUTH_KEY,
+        }
+      );
+    }
+    if (providerName === XAI_PROVIDER_NAME) {
+      return (
+        this.resolveManagedAuth(providerName).oauthRef ?? {
+          storage: 'file',
+          key: XAI_OAUTH_KEY,
+        }
+      );
+    }
+    if (providerName === ANTHROPIC_PROVIDER_NAME) {
+      return (
+        this.resolveManagedAuth(providerName).oauthRef ?? {
+          storage: 'file',
+          key: ANTHROPIC_OAUTH_KEY,
+        }
+      );
+    }
+    if (providerName === GITHUB_COPILOT_PROVIDER_NAME) {
+      return (
+        this.resolveManagedAuth(providerName).oauthRef ?? {
+          storage: 'file',
+          key: GITHUB_COPILOT_OAUTH_KEY,
+        }
+      );
+    }
+    return this.resolveRuntimeManagedAuth(providerName).oauthRef;
   }
 }
 

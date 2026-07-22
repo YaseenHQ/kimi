@@ -18,6 +18,7 @@ import {
   type ToolCallRequest,
   type ToolCallResponse,
   type SwarmModeTrigger,
+  type SessionTurn,
 } from '@moonshot-ai/agent-core';
 import type { Kaos } from '@moonshot-ai/kaos';
 
@@ -213,6 +214,11 @@ export abstract class SDKRpcClientBase {
   async listSessions(input: ListSessionsOptions = {}): Promise<readonly SessionSummary[]> {
     const rpc = await this.getRpc();
     return rpc.listSessions(input);
+  }
+
+  async listSessionTurns(input: SessionIdRpcInput): Promise<readonly SessionTurn[]> {
+    const rpc = await this.getRpc();
+    return rpc.listSessionTurns({ sessionId: input.sessionId });
   }
 
   async listWorkspaceSkills(workDir: string): Promise<readonly SkillSummary[]> {

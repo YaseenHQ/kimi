@@ -3,12 +3,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  ANTHROPIC_OAUTH_KEY,
+  ANTHROPIC_PROVIDER_NAME,
   FileTokenStorage,
+  GITHUB_COPILOT_OAUTH_KEY,
+  GITHUB_COPILOT_PROVIDER_NAME,
   KIMI_CODE_PROVIDER_NAME,
   KimiOAuthToolkit,
+  OPENAI_CODEX_OAUTH_KEY,
+  OPENAI_CODEX_PROVIDER_NAME,
   OAuthConnectionError,
   OAuthError,
   RetryableRefreshError,
+  XAI_OAUTH_KEY,
+  XAI_PROVIDER_NAME,
   resolveKimiCodeOAuthKey,
   resolveKimiTokenStorageName,
   type TokenInfo,
@@ -261,6 +269,203 @@ oauth = { storage = "file", key = "${oauthKey}", oauth_host = "https://auth.dev.
     expect(config.services?.moonshotSearch?.oauth).toEqual({
       storage: 'file',
       key: 'oauth/kimi-code',
+    });
+  });
+
+  it('provisions xAI as an OAuth-backed Chat Completions provider with per-model wire overrides', async () => {
+    await new FileTokenStorage(join(homeDir, 'credentials')).save('xai', freshToken());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            xai: {
+              id: 'xai',
+              name: 'xAI',
+              api: 'https://api.x.ai/v1',
+              npm: '@ai-sdk/xai',
+              models: {
+                'grok-code-fast-1': {
+                  id: 'grok-code-fast-1',
+                  name: 'Grok Code Fast 1',
+                  limit: { context: 256000, output: 10000 },
+                  reasoning: true,
+                  tool_call: true,
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+    const harness = createKimiHarness({ homeDir, identity: TEST_IDENTITY });
+
+    await expect(harness.auth.login(XAI_PROVIDER_NAME)).resolves.toMatchObject({
+      providerName: XAI_PROVIDER_NAME,
+      ok: true,
+      defaultModel: 'xai/grok-code-fast-1',
+      defaultThinking: true,
+    });
+
+    const config = await harness.getConfig({ reload: true });
+    // Provider-level wire is Chat Completions ('openai') — the safe default.
+    // grok-code-fast-1 is not a Responses-API model, so it inherits the
+    // provider default and gets no per-alias `wire` override.
+    expect(config.providers['xai']).toEqual({
+      type: 'openai',
+      baseUrl: 'https://api.x.ai/v1',
+      oauth: { storage: 'file', key: XAI_OAUTH_KEY },
+    });
+    expect(config.models?.['xai/grok-code-fast-1']).toMatchObject({
+      provider: 'xai',
+      maxContextSize: 256000,
+      capabilities: ['thinking', 'tool_use'],
+    });
+    // grok-code-fast-1 is not in XAI_RESPONSES_MODELS → no wire override.
+    expect(config.models?.['xai/grok-code-fast-1']?.wire).toBeUndefined();
+  });
+
+  it('provisions ChatGPT Codex models and resolves account-scoped request auth', async () => {
+    const payload = Buffer.from(
+      JSON.stringify({
+        'https://api.openai.com/auth': { chatgpt_account_id: 'account-123' },
+      }),
+    ).toString('base64url');
+    const accessToken = `header.${payload}.signature`;
+    await new FileTokenStorage(join(homeDir, 'credentials')).save('openai-codex', {
+      ...freshToken(),
+      accessToken,
+    });
+    const harness = createKimiHarness({ homeDir, identity: TEST_IDENTITY });
+
+    await expect(harness.auth.login(OPENAI_CODEX_PROVIDER_NAME)).resolves.toMatchObject({
+      providerName: OPENAI_CODEX_PROVIDER_NAME,
+      ok: true,
+      defaultModel: 'openai-codex/gpt-5.4',
+      defaultThinking: true,
+    });
+
+    const config = await harness.getConfig({ reload: true });
+    expect(config.providers[OPENAI_CODEX_PROVIDER_NAME]).toEqual({
+      type: 'openai_responses',
+      baseUrl: 'https://chatgpt.com/backend-api/codex',
+      oauth: { storage: 'file', key: OPENAI_CODEX_OAUTH_KEY },
+    });
+    expect(config.models?.['openai-codex/gpt-5.6-sol']).toMatchObject({
+      maxContextSize: 272000,
+      maxOutputSize: 128000,
+      capabilities: ['image_in', 'thinking', 'tool_use', 'dynamically_loaded_tools'],
+      supportEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    });
+
+    const requestAuth = await harness.auth
+      .resolveOAuthTokenProvider(OPENAI_CODEX_PROVIDER_NAME, {
+        storage: 'file',
+        key: OPENAI_CODEX_OAUTH_KEY,
+      })
+      .getRequestAuth?.();
+    expect(requestAuth).toEqual({
+      apiKey: accessToken,
+      headers: {
+        'chatgpt-account-id': 'account-123',
+        originator: 'kimi-code',
+        'OpenAI-Beta': 'responses=experimental',
+      },
+    });
+  });
+
+  it('provisions Anthropic OAuth through the shared catalog into config.toml', async () => {
+    await new FileTokenStorage(join(homeDir, 'credentials')).save('anthropic', {
+      ...freshToken(),
+      accessToken: 'sk-ant-oat-test',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            anthropic: {
+              id: 'anthropic',
+              name: 'Anthropic',
+              api: 'https://api.anthropic.com/v1',
+              npm: '@ai-sdk/anthropic',
+              models: {
+                'claude-opus-test': {
+                  id: 'claude-opus-test',
+                  name: 'Claude Opus Test',
+                  limit: { context: 200000, output: 32000 },
+                  reasoning: true,
+                  tool_call: true,
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+    const harness = createKimiHarness({ homeDir, identity: TEST_IDENTITY });
+
+    await expect(
+      harness.auth.login(ANTHROPIC_PROVIDER_NAME, {
+        onBrowserAuthorization: async () => {
+          throw new Error('fresh cached credentials should skip browser authorization');
+        },
+      }),
+    ).resolves.toMatchObject({
+      providerName: ANTHROPIC_PROVIDER_NAME,
+      ok: true,
+      defaultModel: 'anthropic/claude-opus-test',
+      defaultThinking: true,
+    });
+
+    const config = await harness.getConfig({ reload: true });
+    expect(config.providers[ANTHROPIC_PROVIDER_NAME]).toEqual({
+      type: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      oauth: { storage: 'file', key: ANTHROPIC_OAUTH_KEY },
+    });
+    expect(config.models?.['anthropic/claude-opus-test']).toMatchObject({
+      provider: ANTHROPIC_PROVIDER_NAME,
+      maxContextSize: 200000,
+      maxOutputSize: 32000,
+      capabilities: ['thinking', 'tool_use'],
+    });
+  });
+
+  it('resolves provider-specific request headers for Anthropic and GitHub Copilot OAuth', async () => {
+    const storage = new FileTokenStorage(join(homeDir, 'credentials'));
+    await storage.save('anthropic', { ...freshToken(), accessToken: 'sk-ant-oat-test' });
+    await storage.save('github-copilot', { ...freshToken(), accessToken: 'copilot-token' });
+    const harness = createKimiHarness({ homeDir, identity: TEST_IDENTITY });
+
+    const anthropic = await harness.auth
+      .resolveOAuthTokenProvider(ANTHROPIC_PROVIDER_NAME, {
+        storage: 'file',
+        key: ANTHROPIC_OAUTH_KEY,
+      })
+      .getRequestAuth?.();
+    expect(anthropic).toMatchObject({
+      apiKey: 'sk-ant-oat-test',
+      headers: {
+        authorization: 'Bearer sk-ant-oat-test',
+        'anthropic-beta': expect.stringContaining('oauth-2025-04-20'),
+      },
+    });
+
+    const copilot = await harness.auth
+      .resolveOAuthTokenProvider(GITHUB_COPILOT_PROVIDER_NAME, {
+        storage: 'file',
+        key: GITHUB_COPILOT_OAUTH_KEY,
+      })
+      .getRequestAuth?.();
+    expect(copilot).toMatchObject({
+      apiKey: 'copilot-token',
+      headers: {
+        Authorization: 'Bearer copilot-token',
+        'Copilot-Integration-Id': 'vscode-chat',
+      },
     });
   });
 
@@ -566,6 +771,34 @@ oauth = { storage = "file", key = "oauth/kimi-code" }
     expect(text).not.toContain('managed:kimi-code');
     expect(text).not.toContain('kimi-code/kimi-for-coding');
     expect(text).not.toContain('moonshot_search');
+  });
+
+  it('can remove only the OAuth credential while preserving provider config', async () => {
+    await new FileTokenStorage(join(homeDir, 'credentials')).save('kimi-code', freshToken());
+    await writeFile(
+      join(homeDir, 'config.toml'),
+      `
+[providers."managed:kimi-code"]
+type = "kimi"
+api_key = ""
+oauth = { storage = "file", key = "oauth/kimi-code" }
+
+[models."kimi-code/kimi-for-coding"]
+provider = "managed:kimi-code"
+model = "kimi-for-coding"
+max_context_size = 262144
+`,
+    );
+    const harness = createKimiHarness({ homeDir, identity: TEST_IDENTITY });
+
+    await harness.auth.logout(KIMI_CODE_PROVIDER_NAME, { deprovisionConfig: false });
+
+    const config = await harness.getConfig({ reload: true });
+    expect(config.providers[KIMI_CODE_PROVIDER_NAME]).toBeDefined();
+    expect(config.models?.['kimi-code/kimi-for-coding']).toBeDefined();
+    await expect(
+      new FileTokenStorage(join(homeDir, 'credentials')).load('kimi-code'),
+    ).resolves.toBeUndefined();
   });
 
   it('removes the configured scoped OAuth token on logout without touching the production token', async () => {

@@ -191,6 +191,7 @@ export class AgentTranscriptProjector {
       case 'cron.fired':
         return [this.markerOp('cron.fired', restOf(event))];
       case 'compaction.started':
+      case 'compaction.retrying':
       case 'compaction.blocked':
       case 'compaction.cancelled':
       case 'compaction.completed':

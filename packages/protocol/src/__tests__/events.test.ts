@@ -98,6 +98,30 @@ describe('events / display re-exports', () => {
     ).toBe(true);
   });
 
+  it('validates compaction retry lifecycle events', () => {
+    expect(
+      agentEventSchema.parse({
+        type: 'compaction.retrying',
+        failedAttempt: 1,
+        nextAttempt: 2,
+        maxAttempts: 5,
+        delayMs: 750,
+        errorName: 'APIStatusError',
+        errorMessage: 'Provider overloaded',
+        statusCode: 429,
+      }),
+    ).toEqual({
+      type: 'compaction.retrying',
+      failedAttempt: 1,
+      nextAttempt: 2,
+      maxAttempts: 5,
+      delayMs: 750,
+      errorName: 'APIStatusError',
+      errorMessage: 'Provider overloaded',
+      statusCode: 429,
+    });
+  });
+
   it('rejects unknown event types through the full agent event union', () => {
     expect(
       agentEventSchema.safeParse({

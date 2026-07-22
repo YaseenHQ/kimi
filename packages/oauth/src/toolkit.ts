@@ -4,6 +4,18 @@ import { join } from 'node:path';
 import { KIMI_CODE_FLOW_CONFIG } from './constants';
 import { OAuthUnauthorizedError } from './errors';
 import {
+  ANTHROPIC_PROVIDER_NAME,
+  loginAnthropic,
+  refreshAnthropicAccessToken,
+  type BrowserAuthorization,
+} from './anthropic';
+import {
+  GITHUB_COPILOT_OAUTH_FLOW_CONFIG,
+  pollGitHubCopilotDeviceToken,
+  refreshGitHubCopilotAccessToken,
+  requestGitHubCopilotDeviceAuthorization,
+} from './github-copilot';
+import {
   assertKimiHostIdentity,
   createKimiDefaultHeaders,
   createKimiDeviceHeaders,
@@ -38,11 +50,27 @@ import {
   type ParsedManagedUsage,
 } from './managed-usage';
 import { OAuthManager, type LoginOptions, type OAuthManagerOptions } from './oauth-manager';
+import {
+  OPENAI_CODEX_OAUTH_FLOW_CONFIG,
+  loginOpenAICodexBrowser,
+  pollOpenAICodexDeviceToken,
+  refreshOpenAICodexAccessToken,
+  requestOpenAICodexDeviceAuthorization,
+} from './openai-codex';
 import { FileTokenStorage, type TokenStorage } from './storage';
 import type { OAuthFlowConfig } from './types';
+import {
+  pollXaiDeviceToken,
+  refreshXaiAccessToken,
+  requestXaiDeviceAuthorization,
+  XAI_OAUTH_FLOW_CONFIG,
+} from './xai';
 
 export interface BearerTokenProvider {
   getAccessToken(options?: { readonly force?: boolean | undefined }): Promise<string>;
+  getRequestAuth?(
+    options?: { readonly force?: boolean | undefined },
+  ): Promise<{ readonly apiKey?: string; readonly headers?: Record<string, string> }>;
 }
 
 export interface AuthProviderStatus {
@@ -74,6 +102,11 @@ export interface KimiOAuthLoginOptions extends LoginOptions {
   readonly baseUrl?: string | undefined;
   readonly oauthRef?: KimiOAuthTokenRef | undefined;
   readonly oauthHost?: string | undefined;
+  /** OpenAI Codex only: choose browser (PKCE + local server) vs device-code. */
+  readonly method?: 'browser' | 'device_code' | undefined;
+  readonly onBrowserAuthorization?:
+    | ((authorization: BrowserAuthorization) => Promise<string | undefined>)
+    | undefined;
 }
 
 export interface KimiOAuthTokenRef {
@@ -85,6 +118,10 @@ export interface KimiOAuthLoginResult {
   readonly providerName: string;
   readonly ok: true;
   readonly provision?: ManagedKimiCodeProvisionResult | undefined;
+}
+
+export interface KimiOAuthLogoutOptions {
+  readonly deprovisionConfig?: boolean | undefined;
 }
 
 export interface KimiOAuthLogoutResult {
@@ -157,6 +194,33 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     const name = providerName ?? KIMI_CODE_PROVIDER_NAME;
     const oauthHost = this.oauthHostFor(options.oauthRef, options.oauthHost);
     const oauthKey = options.oauthRef?.key ?? this.defaultOAuthKey(options.baseUrl, oauthHost);
+    if (name === ANTHROPIC_PROVIDER_NAME) {
+      if (options.onBrowserAuthorization === undefined) {
+        throw new Error('Anthropic OAuth requires a browser authorization callback.');
+      }
+      options.signal?.throwIfAborted();
+      await this.loginWithToken(name, { key: oauthKey, oauthHost }, async () => {
+        const token = await loginAnthropic(options.onBrowserAuthorization!, options.signal);
+        options.signal?.throwIfAborted();
+        return token;
+      });
+      return { providerName: name, ok: true };
+    }
+    // OpenAI Codex browser (PKCE + local :1455 server) path. Chosen via
+    // options.method === 'browser'; anything else (including the default when
+    // the caller does not pass a method) falls through to device-code below.
+    if (name === OPENAI_CODEX_OAUTH_FLOW_CONFIG.name && options.method === 'browser') {
+      if (options.onBrowserAuthorization === undefined) {
+        throw new Error('OpenAI Codex browser login requires a browser authorization callback.');
+      }
+      options.signal?.throwIfAborted();
+      await this.loginWithToken(name, { key: oauthKey, oauthHost }, async () => {
+        const token = await loginOpenAICodexBrowser(options.onBrowserAuthorization!, options.signal);
+        options.signal?.throwIfAborted();
+        return token;
+      });
+      return { providerName: name, ok: true };
+    }
     const manager = this.managerFor(name, oauthKey, oauthHost);
     const hadToken = await manager.hasToken();
     let usedDeviceLogin = false;
@@ -223,15 +287,40 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     return { providerName: name, ok: true, provision };
   }
 
+  /** Store a token produced by an interactive flow that is not RFC 8628. */
+  async loginWithToken(
+    providerName: string,
+    oauthRef: KimiOAuthTokenRef,
+    acquire: () => Promise<import('./types').TokenInfo>,
+  ): Promise<void> {
+    const oauthHost = this.oauthHostFor(oauthRef);
+    const oauthKey = oauthRef.key ?? this.defaultOAuthKey(undefined, oauthHost);
+    const manager = this.managerFor(providerName, oauthKey, oauthHost);
+    if (await manager.hasToken()) {
+      try {
+        await manager.ensureFresh();
+        return;
+      } catch (error) {
+        if (!(error instanceof OAuthUnauthorizedError)) throw error;
+      }
+    }
+    await manager.saveToken(await acquire());
+  }
+
   async logout(
     providerName?: string | undefined,
     oauthRef?: KimiOAuthTokenRef | undefined,
+    options: KimiOAuthLogoutOptions = {},
   ): Promise<KimiOAuthLogoutResult> {
     const name = providerName ?? KIMI_CODE_PROVIDER_NAME;
     const oauthHost = this.oauthHostFor(oauthRef);
     const oauthKey = oauthRef?.key ?? this.defaultOAuthKey(undefined, oauthHost);
     await this.managerFor(name, oauthKey, oauthHost).logout();
-    if (this.configAdapter?.remove !== undefined && name === KIMI_CODE_PROVIDER_NAME) {
+    if (
+      options.deprovisionConfig !== false &&
+      this.configAdapter?.remove !== undefined &&
+      name === KIMI_CODE_PROVIDER_NAME
+    ) {
       const config = await this.configAdapter.read();
       this.configAdapter.remove(config);
       await this.configAdapter.write(config);
@@ -375,7 +464,28 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     oauthHost?: string | undefined,
   ): OAuthManager {
     const storageName = resolveKimiTokenStorageName({ providerName, oauthKey });
-    const effectiveOAuthHost = oauthHost ?? this.flowConfig.oauthHost;
+    const xai = providerName === XAI_OAUTH_FLOW_CONFIG.name;
+    const openaiCodex = providerName === OPENAI_CODEX_OAUTH_FLOW_CONFIG.name;
+    const githubCopilot = providerName === GITHUB_COPILOT_OAUTH_FLOW_CONFIG.name;
+    const anthropic = providerName === ANTHROPIC_PROVIDER_NAME;
+    const providerFlow = xai
+      ? XAI_OAUTH_FLOW_CONFIG
+      : openaiCodex
+        ? OPENAI_CODEX_OAUTH_FLOW_CONFIG
+        : githubCopilot
+          ? GITHUB_COPILOT_OAUTH_FLOW_CONFIG
+          : this.flowConfig;
+    const effectiveOAuthHost =
+      anthropic
+        ? 'https://platform.claude.com'
+        : githubCopilot
+          // GitHub Copilot: honor an enterprise host (GHES) when supplied so
+          // device-auth and token refresh hit the enterprise endpoints; fall
+          // back to the flow config's public github.com host otherwise.
+          ? (oauthHost ?? providerFlow.oauthHost)
+        : xai || openaiCodex
+          ? providerFlow.oauthHost
+        : (oauthHost ?? this.flowConfig.oauthHost);
     const managerKey = `${storageName}\0${normalizeOAuthHost(effectiveOAuthHost)}`;
     let manager = this.managers.get(managerKey);
     if (manager !== undefined) return manager;
@@ -383,7 +493,7 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     const identity = this.identity;
     manager = new OAuthManager({
       config: {
-        ...this.flowConfig,
+        ...providerFlow,
         oauthHost: effectiveOAuthHost,
         name: storageName,
       },
@@ -398,6 +508,29 @@ export class KimiOAuthToolkit<TConfig = unknown> {
                 version: identity.version,
               }),
       ...this.managerOptions,
+      requestDeviceImpl: xai
+        ? requestXaiDeviceAuthorization
+        : openaiCodex
+          ? requestOpenAICodexDeviceAuthorization
+          : githubCopilot
+            ? requestGitHubCopilotDeviceAuthorization
+          : undefined,
+      pollDeviceImpl: xai
+        ? pollXaiDeviceToken
+        : openaiCodex
+          ? pollOpenAICodexDeviceToken
+          : githubCopilot
+            ? pollGitHubCopilotDeviceToken
+          : undefined,
+      refreshTokenImpl: xai
+        ? refreshXaiAccessToken
+        : openaiCodex
+          ? refreshOpenAICodexAccessToken
+          : githubCopilot
+            ? refreshGitHubCopilotAccessToken
+            : anthropic
+              ? refreshAnthropicAccessToken
+              : undefined,
     });
     this.managers.set(managerKey, manager);
     return manager;
