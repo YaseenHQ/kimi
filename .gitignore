@@ -30,8 +30,11 @@ docker-compose.yml
 
 docs/superpowers/
 reports/
+/references/
 .superpowers/
 /plan/
+.qwen/
+.codex/
 
 # Agent scratch / throwaway files - do not commit
 .tmp/

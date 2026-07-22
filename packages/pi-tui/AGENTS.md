@@ -1,6 +1,18 @@
 # pi-tui Agent Guide
 
-`packages/pi-tui` is a vendored copy of pi-tui from the upstream pi-mono project (baseline: upstream 0.80.2, see commit `7859b0af`). It is no longer patched via pnpm patches — all local fixes are applied directly to the source. The differential-rendering behavior in `src/tui.ts` matches upstream: the fork's viewport/scrollback rendering patches were reverted; the only remaining divergences are listed below.
+`packages/pi-tui` is a vendored copy of pi-tui from the upstream pi repository. It was initially vendored at upstream 0.80.2 in Kimi commit `7859b0af` and is synchronized through upstream 0.81.1 (`20be4b18`). It is no longer patched via pnpm patches — all local fixes are applied directly to the source. The package version is Kimi's release version and must not be used to infer the upstream source baseline. The differential-rendering behavior in `src/tui.ts` matches upstream apart from the local fixes listed below.
+
+## Upstream sync ledger
+
+The 0.81.1 sync preserves the existing Kimi changes and adapts these upstream fixes in chronological order:
+
+- `8a2ce5a5` and `3595e080`: keep the large-paste registry and undo snapshots consistent when markers are deleted, renumbered, cleared, or restored.
+- `8479bd84`: parse legacy Alt-prefixed printable symbols.
+- `1c799cec`: expand visible tabs during terminal output normalization without altering tabs inside terminal control strings.
+- `00b03267`: handle LF, CRLF, and CR line endings in ANSI-aware wrapping.
+- `5f2f7d06`: clear the rendered inverted cursor before restoring the terminal cursor on exit.
+
+The source already included upstream's opt-in Markdown backslash-escape preservation (`f2e9d753`) when it was first vendored. For future syncs, import upstream behavior commit-by-commit and update this ledger only after the full package test suite passes.
 
 ## Local divergences from upstream (must be preserved on every re-vendor)
 

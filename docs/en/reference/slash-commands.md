@@ -30,6 +30,7 @@ Some commands are only available in the idle state. Executing these commands whi
 | `/sessions` | `/resume` | Browse historical sessions and switch to / restore one | No |
 | `/tasks` | `/task` | Browse the background task list | Yes |
 | `/fork` | — | Fork a new session from the current one, preserving the full conversation history | No |
+| `/tree` | — | Browse user turns and fork a new session from the selected point | No |
 | `/title [<text>]` | `/rename` | Without arguments, display the current session title; with an argument, set a new title (max 200 characters) | Yes |
 | `/compact [<instruction>]` | — | Compact the current conversation context to free up token usage; an optional custom instruction can hint to the model what to preserve | No |
 | `/undo [<count>]` | — | Undo recent prompts from the active context. Without a count, opens a selector; with a count, undoes that many prompts. Prompts before the last compaction cannot be undone | No |
@@ -38,7 +39,7 @@ Some commands are only available in the idle state. Executing these commands whi
 | `/init` | — | Analyze the current codebase and generate `AGENTS.md` | No |
 | `/export-md [<path>]` | `/export` | Export the current session as a Markdown file | No |
 | `/export-debug-zip` | — | Export the current session as a debug ZIP archive (same behavior as [`kimi export`](./kimi-command.md#kimi-export)) | No |
-| `/copy` | — | Copy the last assistant message to the clipboard | No |
+| `/copy` | — | Copy the last assistant message to the clipboard (`Ctrl-X`) | No |
 | `/add-dir [<path>]` | — | Add an extra workspace directory to the current session. Run without a path (or with `list`) to list configured directories. When adding, choose whether to remember the directory for the project in `.kimi-code/local.toml` | No |
 | `/web` | — | Open the current session in the web UI: pick a running server to connect to, or start a new foreground server after the TUI exits. See [`kimi web`](./kimi-command.md#kimi-web) | Yes |
 

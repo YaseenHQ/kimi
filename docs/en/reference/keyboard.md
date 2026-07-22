@@ -36,6 +36,7 @@ Type `!` in an empty input box to enter shell mode and run terminal commands dir
 | Shortcut | Function |
 | --- | --- |
 | `Ctrl-G` | Edit the current input in an external editor |
+| `Ctrl-X` | Copy the last assistant response, or the highlighted turn in `/tree`, to the clipboard |
 | `Ctrl-V` | Paste an image or video from the clipboard (Unix / macOS) |
 | `Alt-V` | Paste an image or video from the clipboard (Windows) |
 | `Ctrl--` | Undo |

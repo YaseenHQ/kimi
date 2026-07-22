@@ -22,7 +22,12 @@ This is a TypeScript monorepo built for agent-assisted development. Keep the roo
 - `packages/node-sdk`: the public TypeScript SDK and harness.
 - `packages/kosong`: the LLM / provider abstraction layer.
 - `packages/kaos`: the execution environment and file/process abstractions.
-- `packages/oauth`: Kimi OAuth and managed auth utilities.
+- `packages/oauth`: Kimi-owned OAuth and managed auth utilities. When adapting
+  an external provider flow (for example from the ignored `references/pi`
+  checkout), port only the provider-specific protocol behavior into this
+  package. Keep Kimi's config, credential storage, SDK/service boundaries, and
+  UI as the owners; reference repositories must never become runtime
+  dependencies or introduce a parallel auth/config system.
 - `packages/telemetry`: shared client-side telemetry infrastructure.
 - `packages/transcript`: the isomorphic transcript rendering data layer — agent-granular L1 store, idempotent L2 operations, `off/turn/block/delta` L3 subscription granularity, framework-free L4 view registry, and turn-cursor pagination. Pure TypeScript (browser-safe, no engine imports) and the sole owner of all transcript wire types; consumed by `packages/kap-server` (engine events → transcript, REST + WS surface; live stores backfill history from the persisted per-agent wire records — main on first attach, any agent on demand, cold sessions rebuild any agent — with 0-based turn ordinals matching the engine's).
 - `packages/kap-server`: the Kimi Code server, backed by the DI × Scope agent engine (`@moonshot-ai/agent-core-v2`). Exposes sessions over REST + WebSocket (`/api/v1` + `/api/v1/ws`); bootstrapped from `src/start.ts` and consumed by `apps/kimi-code`. The RPC surface is `/api/v1/debug/*` — a reflection dispatcher over the ENTIRE scoped DI registry (every Service callable, no whitelist; `src/transport/registerDebugRoutes.ts` + `serviceDispatcherRoutes.ts`), mounted only with `--debug-endpoints` on a loopback bind and gated by the global bearer auth; repo dev scripts pass the flag.

@@ -72,6 +72,23 @@ function getCellItalic(terminal: VirtualTerminal, row: number, col: number): num
 	return cell.isItalic();
 }
 
+describe("TUI shutdown", () => {
+	it("clears the rendered cursor before restoring the terminal cursor", async () => {
+		const terminal = new LoggingVirtualTerminal(20, 5);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		component.lines = ["content"];
+		tui.addChild(component);
+		tui.start();
+		await terminal.waitForRender();
+		terminal.clearWrites();
+
+		tui.stop();
+
+		assert.ok(terminal.getWrites().startsWith(" "));
+	});
+});
+
 describe("TUI Kitty image cleanup", () => {
 	it("clears reserved Kitty image rows before drawing appended image placements", async () => {
 		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
