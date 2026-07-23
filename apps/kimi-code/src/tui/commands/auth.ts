@@ -1,210 +1,49 @@
-import {
-  applyOpenPlatformConfig,
-  fetchOpenPlatformModels,
-  filterModelsByPrefix,
-  getOpenPlatformById,
-  OpenPlatformApiError,
-  type ManagedKimiCodeModelInfo,
-  type ManagedKimiConfigShape,
-  type OpenPlatformDefinition,
-} from '@moonshot-ai/kimi-code-oauth';
-import { log } from '@moonshot-ai/kimi-code-sdk';
-
 import type { ChoiceOption } from '../components/dialogs/choice-picker';
-import { DEFAULT_OAUTH_PROVIDER_NAME, PRODUCT_NAME } from '../constant/kimi-tui';
-import { formatErrorMessage } from '../utils/event-payload';
-import type { LoginProgressSpinnerHandle } from '../types';
-import {
-  promptApiKey,
-  promptLogoutProviderSelection,
-  promptModelSelectionForOpenPlatform,
-  promptPlatformSelection,
-} from './prompts';
 import type { SlashCommandHost } from './dispatch';
+import { handleProviderAdd } from './provider';
+import { OAUTH_PROVIDERS } from './provider-login';
+import {
+  promptConfirmProviderConfigurationRemoval,
+  promptLogoutProviderSelection,
+  promptProviderConfigurationRemoval,
+} from './prompts';
 
 // ---------------------------------------------------------------------------
 // Auth: login / logout
 // ---------------------------------------------------------------------------
 
 export async function handleLoginCommand(host: SlashCommandHost): Promise<void> {
-  const platformId = await promptPlatformSelection(host);
-  if (platformId === undefined) return;
-
-  if (platformId === 'kimi-code') {
-    await handleKimiCodeOAuthLogin(host);
-    return;
-  }
-
-  const platform = getOpenPlatformById(platformId);
-  if (platform === undefined) return;
-  await handleOpenPlatformLogin(host, platform);
-}
-
-async function handleKimiCodeOAuthLogin(host: SlashCommandHost): Promise<void> {
-  const status = await host.harness.auth.status(DEFAULT_OAUTH_PROVIDER_NAME);
-  const alreadyLoggedIn = status.providers.some(
-    (provider) => provider.providerName === DEFAULT_OAUTH_PROVIDER_NAME && provider.hasToken,
-  );
-
-  let spinner: LoginProgressSpinnerHandle | undefined;
-  const controller = new AbortController();
-  const cancelLogin = (): void => {
-    controller.abort();
-  };
-  host.cancelInFlight = cancelLogin;
-  try {
-    await host.harness.auth.login(DEFAULT_OAUTH_PROVIDER_NAME, {
-      signal: controller.signal,
-      onDeviceCode: (data) => {
-        spinner = host.showLoginAuthorizationPrompt(data);
-      },
-    });
-    spinner?.stop({ ok: true, label: 'Logged in.' });
-    spinner = undefined;
-    try {
-      await host.authFlow.refreshConfigAfterLogin();
-    } catch (refreshError) {
-      const message = formatErrorMessage(refreshError);
-      host.showError(`Authentication successful, but failed to refresh config: ${message}`);
-      return;
-    }
-    host.track('login', {
-      provider: DEFAULT_OAUTH_PROVIDER_NAME,
-      method: 'oauth',
-      already_logged_in: alreadyLoggedIn,
-    });
-    if (alreadyLoggedIn) {
-      host.showStatus('Already logged in. Model configuration refreshed.');
-    }
-  } catch (error) {
-    const cancelled = controller.signal.aborted;
-    spinner?.stop({
-      ok: false,
-      label: cancelled ? 'Login cancelled.' : 'Login failed.',
-    });
-    spinner = undefined;
-    if (cancelled) return;
-    log.warn('login failed', {
-      providerName: DEFAULT_OAUTH_PROVIDER_NAME,
-      alreadyLoggedIn,
-      sessionId: host.session?.id,
-      error,
-    });
-    const message = formatErrorMessage(error);
-    host.showError(`Login failed: ${message}`);
-  } finally {
-    if (host.cancelInFlight === cancelLogin) {
-      host.cancelInFlight = undefined;
-    }
-  }
-}
-
-async function handleOpenPlatformLogin(
-  host: SlashCommandHost,
-  platform: OpenPlatformDefinition,
-): Promise<void> {
-  const consoleHost = platform.consoleUrl?.replace(/^https?:\/\//, '') ?? '';
-  const platformName = consoleHost.length > 0 ? `Kimi Platform (${consoleHost})` : 'Kimi Platform';
-  const subtitleLines = [
-    `${'base_url'.padEnd(12)}${platform.baseUrl}`,
-    `${'saved to'.padEnd(12)}~/.kimi-code/config.toml`,
-  ];
-  const apiKey = await promptApiKey(host, platformName, subtitleLines);
-  if (apiKey === undefined) return;
-
-  const controller = new AbortController();
-  const cancelLogin = (): void => {
-    controller.abort();
-  };
-  host.cancelInFlight = cancelLogin;
-
-  let models: ManagedKimiCodeModelInfo[];
-  try {
-    models = await fetchOpenPlatformModels(platform, apiKey, fetch, controller.signal);
-    models = filterModelsByPrefix(models, platform);
-  } catch (error) {
-    if (controller.signal.aborted) return;
-    const msg = formatErrorMessage(error);
-    host.showError(`Failed to verify API key: ${msg}`);
-    if (
-      error instanceof OpenPlatformApiError &&
-      error.status === 401
-    ) {
-      host.showStatus(
-        'Hint: If your API key was obtained from Kimi Code, please select "Kimi Code" instead.',
-      );
-    }
-    return;
-  } finally {
-    if (host.cancelInFlight === cancelLogin) {
-      host.cancelInFlight = undefined;
-    }
-  }
-
-  if (models.length === 0) {
-    host.showError('No models available for this platform.');
-    return;
-  }
-
-  const selection = await promptModelSelectionForOpenPlatform(host, models, platform);
-  if (selection === undefined) return;
-
-  const existingConfig = await host.harness.getConfig();
-  if (existingConfig.providers[platform.id] !== undefined) {
-    await host.harness.removeProvider(platform.id);
-  }
-
-  const config = await host.harness.getConfig();
-  applyOpenPlatformConfig(config as ManagedKimiConfigShape, {
-    platform,
-    models,
-    selectedModel: selection.model,
-    thinking: selection.thinking !== 'off',
-    effort:
-      selection.thinking !== 'off' && selection.thinking !== 'on'
-        ? selection.thinking
-        : undefined,
-    apiKey,
-  });
-
-  await host.harness.setConfig({
-    providers: config.providers,
-    models: config.models,
-    defaultModel: config.defaultModel,
-    thinking: config.thinking,
-  });
-
-  await host.authFlow.refreshConfigAfterLogin();
-  host.track('login', { provider: platform.id, method: 'api_key' });
-  host.showStatus(`Setup complete: ${platform.name} · ${selection.model.id}`);
+  await handleProviderAdd(host);
 }
 
 export async function handleLogoutCommand(host: SlashCommandHost): Promise<void> {
-  const oauthStatus = await host.harness.auth.status(DEFAULT_OAUTH_PROVIDER_NAME);
-  const hasOAuthToken = oauthStatus.providers.some(
-    (p) => p.providerName === DEFAULT_OAUTH_PROVIDER_NAME && p.hasToken,
-  );
   const config = await host.harness.getConfig();
-  const hasManagedRemnant =
-    hasOAuthToken || config.providers[DEFAULT_OAUTH_PROVIDER_NAME] !== undefined;
-  const apiKeyProviderIds = Object.keys(config.providers ?? {})
-    .filter((id) => id !== DEFAULT_OAUTH_PROVIDER_NAME)
-    .toSorted();
-
-  const options: ChoiceOption[] = [];
-  if (hasManagedRemnant) {
-    options.push({
-      value: DEFAULT_OAUTH_PROVIDER_NAME,
-      label: PRODUCT_NAME,
-      description: 'OAuth login',
-    });
+  const oauthIds = new Set(OAUTH_PROVIDERS.map((provider) => provider.id));
+  const oauthTargets: CredentialTarget[] = [];
+  for (const provider of OAUTH_PROVIDERS) {
+    const status = await host.harness.auth.status(provider.id);
+    const hasToken = status.providers.some(
+      (entry) => entry.providerName === provider.id && entry.hasToken,
+    );
+    if (hasToken) oauthTargets.push({ id: provider.id, label: provider.label, kind: 'oauth' });
   }
-  for (const id of apiKeyProviderIds) {
-    const baseUrl = config.providers[id]?.baseUrl;
+  const apiKeyTargets: CredentialTarget[] = [];
+  for (const id of Object.keys(config.providers).toSorted()) {
+    if (oauthIds.has(id)) continue;
+    const provider = config.providers[id];
+    if (provider === undefined || !hasConfiguredApiKey(provider)) continue;
+    apiKeyTargets.push({ id, label: id, kind: 'api-key' });
+  }
+
+  const targets = [...oauthTargets, ...apiKeyTargets];
+  const options = credentialLogoutOptions(oauthTargets, apiKeyTargets);
+  const removalGroups = providerRemovalGroups(config.providers, oauthIds);
+  if (removalGroups.length > 0) {
     options.push({
-      value: id,
-      label: id,
-      description: typeof baseUrl === 'string' && baseUrl.length > 0 ? baseUrl : undefined,
+      value: REMOVE_CONFIGURATION,
+      label: 'Remove saved provider configuration…',
+      description: 'Permanently delete provider and model entries.',
+      descriptionTone: 'warning',
     });
   }
 
@@ -219,24 +58,250 @@ export async function handleLogoutCommand(host: SlashCommandHost): Promise<void>
   const target = await promptLogoutProviderSelection(host, options, currentProvider);
   if (target === undefined) return;
 
-  if (target === DEFAULT_OAUTH_PROVIDER_NAME) {
-    await host.harness.auth.logout(DEFAULT_OAUTH_PROVIDER_NAME);
-  } else {
-    await host.harness.removeProvider(target);
+  if (target === REMOVE_CONFIGURATION) {
+    await handleProviderConfigurationRemoval(host, removalGroups, currentProvider, oauthIds);
+    return;
   }
 
-  if (target === currentProvider) {
+  const selectedTargets = resolveCredentialTargets(target, targets, oauthTargets, apiKeyTargets);
+  if (selectedTargets.length === 0) return;
+  await logoutCredentialTargets(host, config, selectedTargets, currentProvider);
+
+  if (selectedTargets.length === 1) {
+    host.track('logout', { provider: selectedTargets[0]!.id });
+    host.showStatus(`Logged out from ${selectedTargets[0]!.label}.`);
+  } else {
+    host.track('logout', {
+      providers: selectedTargets.map((entry) => entry.id),
+      scope: 'bundle',
+    });
+    host.showStatus(`Logged out from ${String(selectedTargets.length)} providers.`);
+  }
+}
+
+const ALL_OAUTH = '__logout_all_oauth__';
+const ALL_API_KEYS = '__logout_all_api_keys__';
+const ALL_CREDENTIALS = '__logout_all_credentials__';
+const REMOVE_CONFIGURATION = '__remove_provider_configuration__';
+
+interface CredentialTarget {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: 'oauth' | 'api-key';
+}
+
+interface ProviderRemovalGroup {
+  readonly value: string;
+  readonly label: string;
+  readonly providerIds: readonly string[];
+  readonly providerLabels: readonly string[];
+}
+
+function credentialLogoutOptions(
+  oauthTargets: readonly CredentialTarget[],
+  apiKeyTargets: readonly CredentialTarget[],
+): ChoiceOption[] {
+  const options: ChoiceOption[] = [...oauthTargets, ...apiKeyTargets].map((target) => ({
+    value: target.id,
+    label: target.label,
+    description: target.kind === 'oauth' ? 'OAuth account' : 'API key',
+  }));
+  if (oauthTargets.length > 1) {
+    options.push(bundleOption(ALL_OAUTH, 'All OAuth accounts', oauthTargets));
+  }
+  if (apiKeyTargets.length > 1) {
+    options.push(bundleOption(ALL_API_KEYS, 'All API-key providers', apiKeyTargets));
+  }
+  if (oauthTargets.length > 0 && apiKeyTargets.length > 0) {
+    options.push(bundleOption(ALL_CREDENTIALS, 'All credentials', [...oauthTargets, ...apiKeyTargets]));
+  }
+  return options;
+}
+
+function bundleOption(
+  value: string,
+  label: string,
+  targets: readonly CredentialTarget[],
+): ChoiceOption {
+  return {
+    value,
+    label,
+    description: `Includes: ${targets.map((target) => target.label).join(', ')}`,
+    descriptionTone: 'warning',
+  };
+}
+
+function resolveCredentialTargets(
+  value: string,
+  allTargets: readonly CredentialTarget[],
+  oauthTargets: readonly CredentialTarget[],
+  apiKeyTargets: readonly CredentialTarget[],
+): readonly CredentialTarget[] {
+  if (value === ALL_OAUTH) return oauthTargets;
+  if (value === ALL_API_KEYS) return apiKeyTargets;
+  if (value === ALL_CREDENTIALS) return allTargets;
+  const target = allTargets.find((entry) => entry.id === value);
+  return target === undefined ? [] : [target];
+}
+
+async function logoutCredentialTargets(
+  host: SlashCommandHost,
+  config: Awaited<ReturnType<SlashCommandHost['harness']['getConfig']>>,
+  targets: readonly CredentialTarget[],
+  currentProvider: string | undefined,
+): Promise<void> {
+  const providerPatches: typeof config.providers = {};
+  for (const target of targets) {
+    if (target.kind === 'oauth') {
+      await host.harness.auth.logout(target.id, { deprovisionConfig: false });
+      continue;
+    }
+    const provider = config.providers[target.id];
+    if (provider === undefined) continue;
+    const env = { ...provider.env };
+    for (const key of apiKeyEnvNames(provider.type)) {
+      if (env[key] !== undefined) env[key] = '';
+    }
+    providerPatches[target.id] = {
+      ...provider,
+      apiKey: '',
+      ...(provider.env === undefined ? {} : { env }),
+    };
+  }
+
+  if (Object.keys(providerPatches).length > 0) {
+    await host.harness.setConfig({ providers: providerPatches });
+    await host.authFlow.refreshConfigAfterLogout();
+  }
+  if (targets.some((target) => target.id === currentProvider && target.kind === 'api-key')) {
+    await host.authFlow.clearActiveSessionAfterLogout();
+  }
+}
+
+function providerRemovalGroups(
+  providers: Awaited<ReturnType<SlashCommandHost['harness']['getConfig']>>['providers'],
+  oauthIds: ReadonlySet<string>,
+): readonly ProviderRemovalGroup[] {
+  const groups: ProviderRemovalGroup[] = [];
+  const registryGroups = new Map<string, number>();
+  for (const [id, provider] of Object.entries(providers).toSorted(([a], [b]) => a.localeCompare(b))) {
+    const source = provider.source;
+    if (
+      source?.['kind'] === 'apiJson' &&
+      typeof source['url'] === 'string' &&
+      typeof source['apiKey'] === 'string'
+    ) {
+      const key = `${source['url']}\u0000${source['apiKey']}`;
+      const existing = registryGroups.get(key);
+      if (existing !== undefined) {
+        const group = groups[existing]!;
+        groups[existing] = {
+          ...group,
+          providerIds: [...group.providerIds, id],
+          providerLabels: [...group.providerLabels, providerLabel(id, oauthIds)],
+        };
+        continue;
+      }
+      registryGroups.set(key, groups.length);
+      groups.push({
+        value: `registry:${String(groups.length)}`,
+        label: `Registry: ${registryLabel(source['url'])}`,
+        providerIds: [id],
+        providerLabels: [providerLabel(id, oauthIds)],
+      });
+      continue;
+    }
+    groups.push({
+      value: `provider:${id}`,
+      label: providerLabel(id, oauthIds),
+      providerIds: [id],
+      providerLabels: [providerLabel(id, oauthIds)],
+    });
+  }
+  return groups;
+}
+
+async function handleProviderConfigurationRemoval(
+  host: SlashCommandHost,
+  groups: readonly ProviderRemovalGroup[],
+  currentProvider: string | undefined,
+  oauthIds: ReadonlySet<string>,
+): Promise<void> {
+  const currentValue = groups.find((group) => group.providerIds.includes(currentProvider ?? ''))?.value;
+  const selected = await promptProviderConfigurationRemoval(
+    host,
+    groups.map((group) => ({
+      value: group.value,
+      label: group.label,
+      description:
+        group.providerLabels.length > 1
+          ? `Includes: ${group.providerLabels.join(', ')}`
+          : 'Delete provider, models, and credentials.',
+      descriptionTone: 'warning',
+    })),
+    currentValue,
+  );
+  const group = groups.find((entry) => entry.value === selected);
+  if (group === undefined) return;
+  if (!(await promptConfirmProviderConfigurationRemoval(host, group.label, group.providerLabels))) return;
+
+  let updated = await host.harness.getConfig();
+  for (const providerId of group.providerIds) {
+    if (oauthIds.has(providerId)) {
+      await host.harness.auth.logout(providerId, { deprovisionConfig: false });
+    }
+    updated = await host.harness.removeProvider(providerId);
+  }
+  if (group.providerIds.includes(currentProvider ?? '')) {
     await host.authFlow.refreshConfigAfterLogout();
     await host.authFlow.clearActiveSessionAfterLogout();
   } else {
-    const updated = await host.harness.getConfig({ reload: true });
     host.setAppState({
-      availableModels: updated.models ?? {},
       availableProviders: updated.providers ?? {},
+      availableModels: updated.models ?? {},
     });
   }
+  host.track('provider_remove', { providers: group.providerIds });
+  host.showStatus(`Removed ${group.label}.`);
+}
 
-  host.track('logout', { provider: target });
-  const label = target === DEFAULT_OAUTH_PROVIDER_NAME ? PRODUCT_NAME : target;
-  host.showStatus(`Logged out from ${label}.`);
+function providerLabel(id: string, oauthIds: ReadonlySet<string>): string {
+  if (!oauthIds.has(id)) return id;
+  return OAUTH_PROVIDERS.find((provider) => provider.id === id)?.label ?? id;
+}
+
+function registryLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return url;
+  }
+}
+
+function hasConfiguredApiKey(provider: {
+  readonly type: string;
+  readonly apiKey?: string | undefined;
+  readonly env?: Readonly<Record<string, string>> | undefined;
+}): boolean {
+  if (provider.apiKey?.trim()) return true;
+  return apiKeyEnvNames(provider.type).some((key) => provider.env?.[key]?.trim());
+}
+
+function apiKeyEnvNames(providerType: string): readonly string[] {
+  switch (providerType) {
+    case 'anthropic':
+      return ['ANTHROPIC_API_KEY'];
+    case 'openai':
+    case 'openai_responses':
+      return ['OPENAI_API_KEY'];
+    case 'kimi':
+      return ['KIMI_API_KEY'];
+    case 'google-genai':
+      return ['GOOGLE_API_KEY'];
+    case 'vertexai':
+      return ['VERTEXAI_API_KEY', 'GOOGLE_API_KEY'];
+    default:
+      return [];
+  }
 }

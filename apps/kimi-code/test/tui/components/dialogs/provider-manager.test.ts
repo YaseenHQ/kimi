@@ -6,6 +6,7 @@ import {
   ProviderManagerComponent,
   type ProviderManagerOptions,
 } from '#/tui/components/dialogs/provider-manager';
+import { DEFAULT_OAUTH_PROVIDER_NAME } from '#/constant/app';
 import { darkColors } from '#/tui/theme/colors';
 
 // Truecolor SGR fragments for the darkColors tokens we assert on
@@ -32,7 +33,7 @@ function makeComponent(overrides: Partial<ProviderManagerOptions> = {}): Provide
 }
 
 function addRowLine(component: ProviderManagerComponent, width = 120): string | undefined {
-  return component.render(width).find((line) => line.includes('Add New Platform'));
+  return component.render(width).find((line) => line.includes('Add Provider'));
 }
 
 describe('ProviderManagerComponent', () => {
@@ -45,7 +46,7 @@ describe('ProviderManagerComponent', () => {
     chalk.level = previousLevel;
   });
 
-  it('renders [ Add New Platform ] in the brand color, never muted, when not selected', () => {
+  it('renders [ Add Provider ] in the brand color, never muted, when not selected', () => {
     // A configured provider occupies row 0 (selected); the add row sits below
     // it and is therefore not the highlighted row.
     const component = makeComponent({
@@ -60,7 +61,7 @@ describe('ProviderManagerComponent', () => {
     expect(line).not.toContain(MUTED);
   });
 
-  it('bolds [ Add New Platform ] when it is the selected row', () => {
+  it('bolds [ Add Provider ] when it is the selected row', () => {
     // With no configured providers the synthetic add row is the only row, so it
     // starts as the highlighted selection.
     const component = makeComponent();
@@ -68,6 +69,23 @@ describe('ProviderManagerComponent', () => {
     expect(line).toBeDefined();
     expect(line).toContain(BOLD);
     expect(line).toContain(PRIMARY);
+  });
+
+  it('shows the managed Kimi account as an OAuth provider source', () => {
+    const component = makeComponent({
+      providers: {
+        [DEFAULT_OAUTH_PROVIDER_NAME]: {
+          type: 'kimi',
+          baseUrl: 'https://api.kimi.com/coding/v1',
+          oauth: { storage: 'file', key: DEFAULT_OAUTH_PROVIDER_NAME },
+        },
+      } as unknown as Record<string, ProviderConfig>,
+      activeProviderId: DEFAULT_OAUTH_PROVIDER_NAME,
+    });
+
+    const plain = rendered(component);
+    expect(plain).toContain('Kimi Code (OAuth)');
+    expect(plain).toContain('← current');
   });
 
   it('marks the active provider with the shared "← current" marker, not a bullet', () => {

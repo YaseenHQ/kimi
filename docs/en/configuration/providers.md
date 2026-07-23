@@ -19,24 +19,20 @@ All providers communicate with models in streaming mode by default. Capabilities
 
 **Credential priority**: `api_key` direct field > `[providers.<name>.env]` sub-table key > if both are absent, startup fails with an error. The CLI does not fall back to shell environment variables for credentials — see [Config overrides: provider credentials](./overrides.md#provider-credentials).
 
-## `/provider` — interactive provider management
+## `/login` and `/logout` — interactive provider management
 
-Prefer not to edit TOML by hand? Type `/provider` in the TUI to open the **provider manager**, where you can interactively add or remove providers.
+Run `/login` to connect a provider through one of two authentication routes:
 
-The manager displays providers as a list of entries grouped by source. Navigation:
+- **Sign in with an account (OAuth)**: Kimi Code, xAI, OpenAI Codex (ChatGPT Plus or Pro), Anthropic (Claude Pro or Max), and GitHub Copilot.
+- **Connect with an API key**: choose a Kimi Platform region, a known provider from the [models.dev](https://models.dev/) catalog, or a custom `api.json` registry.
 
-- ↑/↓ to move the cursor, ←/→ to page
-- `d` to delete the current provider (with `[y/N]` confirmation)
-- Press Enter on the `[ Add New Platform ]` row to add a new provider
+OAuth tokens are stored separately from `config.toml`; provider references and model metadata remain in Kimi's normal configuration format. `/logout` lists every connected provider individually and can also clear **All OAuth accounts**, **All API-key providers**, or **All credentials**. Each bundle shows exactly which providers it includes. Credential logout preserves provider/model configuration and saved sessions. An active OAuth session remains open; an active API-key session is closed so it cannot retain the cleared key in memory.
 
-Two paths when adding:
+For complete deletion, choose **Remove saved provider configuration…** in `/logout`. This separately confirms removal of the selected provider, its models, associated credentials, and managed services. Providers written manually in `config.toml` appear here automatically; `config.toml` is storage, not a login method.
 
-- **Known third-party provider**: fetches the model catalog from [models.dev](https://models.dev/), select a provider → enter an API key → select a default model
-- **Custom registry (api.json)**: paste a custom registry URL and Bearer token; the CLI automatically creates the `providers` / `models` entries. On later startup, providers from the same registry URL are refreshed together, so upstream provider additions, removals, and model metadata changes are synced.
+Kimi Code currently stores one OAuth account per provider. Running `/login` for a connected provider lets you keep the current account or choose **Switch account**. A switch replaces the stored credential only after the new login succeeds, so cancelling or failing the flow leaves the current account usable.
 
-::: warning
-Kimi Code OAuth managed accounts logged in via `/login` do not appear in `/provider`. Use `/login` and `/logout` to manage them.
-:::
+For a custom registry, paste its URL and Bearer token. The CLI creates the `providers` / `models` entries. On later startup, providers from the same registry URL are refreshed together, so upstream provider additions, removals, and model metadata changes are synced.
 
 The same operations are also available in non-interactive environments via the shell command: [`kimi provider`](../reference/kimi-command.md#kimi-provider).
 
@@ -154,7 +150,24 @@ To route Vertex requests through a custom (e.g. proxied) endpoint, set `base_url
 
 ## OAuth and credential injection
 
-The Kimi Code managed service uses OAuth rather than static API keys. After running `/login`, the built-in authentication toolchain automatically writes and refreshes credentials — no manual configuration is needed in `config.toml` for this.
+Kimi Code, xAI, OpenAI Codex, Anthropic, and GitHub Copilot can use OAuth rather than static API keys. After running `/login` and choosing **Sign in with an account (OAuth)**, the built-in authentication toolchain stores and refreshes the credential and writes the provider/model configuration automatically. Anthropic uses browser PKCE with a local callback server that auto-captures the redirect (manual paste as fallback); OpenAI Codex offers a browser or device-code choice; GitHub Copilot accepts a GitHub Enterprise domain; the others use their supported device-code flows.
+
+For xAI, Anthropic, and GitHub Copilot, models.dev metadata is fetched again whenever that provider logs in; Copilot also filters it against the models enabled for the authenticated account. This is login-time refresh, not a background updater. Kimi Code uses its managed models endpoint, while OpenAI Codex follows the explicit list described below.
+
+For example, xAI is persisted in the same `config.toml` architecture as every other provider:
+
+```toml
+[providers.xai]
+type = "openai_responses"
+base_url = "https://api.x.ai/v1"
+oauth = { storage = "file", key = "oauth/xai" }
+```
+
+The token itself is not written to `config.toml`.
+
+OpenAI Codex uses a small explicit model list adapted from Pi rather than models.dev, because Pi does not fetch these subscription-backed models from models.dev either. Updating the Pi reference does not update Kimi automatically; the list must be reviewed when Pi changes it.
+
+Radius is intentionally not a built-in OAuth choice: it is a configurable gateway ecosystem rather than one fixed, portable subscription OAuth protocol. Add a Radius deployment through API key or a custom registry with its actual endpoint and model registry.
 
 ## Next steps
 

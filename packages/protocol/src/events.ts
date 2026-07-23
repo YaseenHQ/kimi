@@ -804,6 +804,17 @@ export interface CompactionStartedEvent {
   readonly instruction?: string;
 }
 
+export interface CompactionRetryingEvent {
+  readonly type: 'compaction.retrying';
+  readonly failedAttempt: number;
+  readonly nextAttempt: number;
+  readonly maxAttempts: number;
+  readonly delayMs: number;
+  readonly errorName: string;
+  readonly errorMessage: string;
+  readonly statusCode?: number;
+}
+
 export interface CompactionBlockedEvent {
   readonly type: 'compaction.blocked';
   readonly turnId?: number;
@@ -941,6 +952,7 @@ export type AgentEvent =
   | SubagentCompletedEvent
   | SubagentFailedEvent
   | CompactionStartedEvent
+  | CompactionRetryingEvent
   | CompactionBlockedEvent
   | CompactionCancelledEvent
   | CompactionCompletedEvent
@@ -1665,6 +1677,17 @@ export const compactionStartedEventSchema = z.object({
   instruction: z.string().optional(),
 }) satisfies z.ZodType<CompactionStartedEvent>;
 
+export const compactionRetryingEventSchema = z.object({
+  type: z.literal('compaction.retrying'),
+  failedAttempt: z.number(),
+  nextAttempt: z.number(),
+  maxAttempts: z.number(),
+  delayMs: z.number(),
+  errorName: z.string(),
+  errorMessage: z.string(),
+  statusCode: z.number().optional(),
+}) satisfies z.ZodType<CompactionRetryingEvent>;
+
 export const compactionBlockedEventSchema = z.object({
   type: z.literal('compaction.blocked'),
   turnId: z.number().optional(),
@@ -1799,6 +1822,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   subagentCompletedEventSchema,
   subagentFailedEventSchema,
   compactionStartedEventSchema,
+  compactionRetryingEventSchema,
   compactionBlockedEventSchema,
   compactionCancelledEventSchema,
   compactionCompletedEventSchema,

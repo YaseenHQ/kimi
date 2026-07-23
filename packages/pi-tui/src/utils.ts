@@ -300,14 +300,35 @@ export function asciiVisibleWidth(line: string, limit: number): number | undefin
  * Normalize text for terminal output without changing logical editor content.
  * Some terminals render precomposed Thai/Lao AM vowels inconsistently during
  * differential repaint. Their compatibility decompositions have the same cell
- * width but avoid stale-cell artifacts in terminal renderers.
+ * width but avoid stale-cell artifacts in terminal renderers. Visible tabs are
+ * expanded to the fixed width used by layout so terminal tab stops cannot wrap
+ * a logical line, while tabs inside terminal string sequences stay untouched.
  */
 const THAI_LAO_AM_REGEX = /[\u0e33\u0eb3]/;
 const THAI_LAO_AM_GLOBAL_REGEX = /[\u0e33\u0eb3]/g;
 
 export function normalizeTerminalOutput(str: string): string {
-	if (!THAI_LAO_AM_REGEX.test(str)) return str;
-	return str.replace(THAI_LAO_AM_GLOBAL_REGEX, (char) => (char === "\u0e33" ? "\u0e4d\u0e32" : "\u0ecd\u0eb2"));
+	let normalized = str;
+	if (THAI_LAO_AM_REGEX.test(normalized)) {
+		normalized = normalized.replace(THAI_LAO_AM_GLOBAL_REGEX, (char) =>
+			char === "\u0e33" ? "\u0e4d\u0e32" : "\u0ecd\u0eb2",
+		);
+	}
+	if (!normalized.includes("\t")) return normalized;
+
+	let result = "";
+	let i = 0;
+	while (i < normalized.length) {
+		const ansi = extractAnsiCode(normalized, i);
+		if (ansi) {
+			result += ansi.code;
+			i += ansi.length;
+			continue;
+		}
+		result += normalized[i] === "\t" ? "   " : normalized[i];
+		i++;
+	}
+	return result;
 }
 
 /**
@@ -326,24 +347,14 @@ export function extractAnsiCode(str: string, pos: number): { code: string; lengt
 		return null;
 	}
 
-	// OSC sequence: ESC ] ... BEL or ESC ] ... ST (ESC \)
-	// Used for hyperlinks (OSC 8), window titles, etc.
-	if (next === "]") {
+	// String sequences: OSC, DCS, SOS, PM, and APC. OSC/APC commonly accept
+	// BEL; every form accepts the standard ST terminator (ESC \).
+	if (next === "]" || next === "P" || next === "X" || next === "^" || next === "_") {
 		let j = pos + 2;
 		while (j < str.length) {
-			if (str[j] === "\x07") return { code: str.substring(pos, j + 1), length: j + 1 - pos };
-			if (str[j] === "\x1b" && str[j + 1] === "\\") return { code: str.substring(pos, j + 2), length: j + 2 - pos };
-			j++;
-		}
-		return null;
-	}
-
-	// APC sequence: ESC _ ... BEL or ESC _ ... ST (ESC \)
-	// Used for cursor marker and application-specific commands
-	if (next === "_") {
-		let j = pos + 2;
-		while (j < str.length) {
-			if (str[j] === "\x07") return { code: str.substring(pos, j + 1), length: j + 1 - pos };
+			if ((next === "]" || next === "_") && str[j] === "\x07") {
+				return { code: str.substring(pos, j + 1), length: j + 1 - pos };
+			}
 			if (str[j] === "\x1b" && str[j + 1] === "\\") return { code: str.substring(pos, j + 2), length: j + 2 - pos };
 			j++;
 		}
@@ -724,7 +735,7 @@ export function wrapTextWithAnsi(text: string, width: number): string[] {
 
 	// Handle newlines by processing each line separately
 	// Track ANSI state across lines so styles carry over after literal newlines
-	const inputLines = text.split("\n");
+	const inputLines = text.split(/\r\n|\r|\n/);
 	const result: string[] = [];
 	const tracker = new AnsiCodeTracker();
 

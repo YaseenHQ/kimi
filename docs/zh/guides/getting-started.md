@@ -108,7 +108,7 @@ kimi -c
 需要退出登录时，输入 `/logout` 清除当前凭证。
 
 ::: tip 使用其他 AI 供应商
-如果你想接入 Anthropic、OpenAI、Google 等其他供应商，需要直接编辑 `~/.kimi-code/config.toml` 配置 API 密钥，详见[平台与模型](../configuration/providers.md)。配置项完整说明见[配置文件](../configuration/config-files.md)、[环境变量](../configuration/env-vars.md)和[配置覆盖](../configuration/overrides.md)。
+如需接入 Anthropic、OpenAI、Google 等其他供应商，请运行 `/login` 并选择账号（OAuth）或 API key 方式；也可以直接编辑 `~/.kimi-code/config.toml`。详见[平台与模型](../configuration/providers.md)。
 :::
 
 ## 第一个对话

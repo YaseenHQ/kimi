@@ -48,7 +48,7 @@ import * as slashCommands from './commands/dispatch';
 import { BannerComponent } from './components/chrome/banner';
 import { DeviceCodeBoxComponent } from './components/chrome/device-code-box';
 import { GutterContainer } from './components/chrome/gutter-container';
-import { MoonLoader, type SpinnerStyle } from './components/chrome/moon-loader';
+import { MoonLoader } from './components/chrome/moon-loader';
 import { WelcomeComponent } from './components/chrome/welcome';
 import { pickRandomWorkingTip } from './components/chrome/working-tips';
 import {
@@ -127,6 +127,7 @@ import {
   type LoginProgressSpinnerHandle,
   type QueuedMessage,
   type SteerInputItem,
+  type StepRetryStatus,
   type TranscriptEntry,
   type TUIStartupOptions,
   type TUIStartupState,
@@ -185,12 +186,28 @@ export interface KimiTUIStartupInput {
 }
 
 type EffectiveActivityPaneMode = ActivityPaneMode | 'idle' | 'session';
-type LoadingTipKind = 'moon' | 'composing';
+type LoadingTipKind = 'active' | 'composing';
 
 function loadingTipKind(mode: EffectiveActivityPaneMode): LoadingTipKind | undefined {
-  if (mode === 'waiting' || mode === 'tool') return 'moon';
+  if (mode === 'waiting' || mode === 'tool') return 'active';
   if (mode === 'composing') return 'composing';
   return undefined;
+}
+
+function singleLineStatus(text: string): string {
+  return text.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function formatRetryStatus(
+  status: StepRetryStatus,
+  subject: 'request' | 'compaction' = 'request',
+): string {
+  const seconds = status.delayMs / 1000;
+  const delay = seconds >= 10 ? `${String(Math.round(seconds))}s` : `${seconds.toFixed(1)}s`;
+  const reason = singleLineStatus(status.errorMessage) || singleLineStatus(status.errorName);
+  const code = status.statusCode === undefined ? '' : ` ${String(status.statusCode)}`;
+  const detail = reason.length === 0 ? '' : ` ·${code} ${reason}`;
+  return `Retrying ${subject} ${String(status.nextAttempt)}/${String(status.maxAttempts)} in ${delay}${detail}`;
 }
 
 function sameStringArrays(a: readonly string[], b: readonly string[]): boolean {
@@ -1047,7 +1064,7 @@ export class KimiTUI {
     markTranscriptComponent(outputComponent, outputEntry);
     this.state.transcriptContainer.addChild(outputComponent);
     // Treat command execution as a streaming phase so input queues, the activity
-    // pane shows the moon spinner, and ctrl+b is enabled while it runs.
+    // pane shows the activity spinner, and ctrl+b is enabled while it runs.
     this.setAppState({ streamingPhase: 'shell' });
     this.state.ui.requestRender();
 
@@ -1551,6 +1568,8 @@ export class KimiTUI {
       contextTokens: status.contextTokens,
       maxContextTokens: status.maxContextTokens,
       contextUsage: status.contextUsage,
+      usage: status.usage,
+      retryStatus: undefined,
       sessionTitle: session.summary?.title ?? null,
       goal: goalResult.goal,
     });
@@ -2313,7 +2332,7 @@ export class KimiTUI {
 
   showProgressSpinner(label: string): LoginProgressSpinnerHandle {
     const tint = (s: string): string => currentTheme.fg('primary', s);
-    const spinner = new MoonLoader(this.state.ui, 'braille', tint, label);
+    const spinner = new MoonLoader(this.state.ui, tint, label);
     this.state.transcriptContainer.addChild(new Spacer(1));
     this.state.transcriptContainer.addChild(spinner);
     this.state.ui.requestRender();
@@ -2353,7 +2372,7 @@ export class KimiTUI {
     const effectiveMode = this.resolveActivityPaneMode();
     const tipKind = loadingTipKind(effectiveMode);
     // Pick a fresh loading tip when the loading kind changes. The same kind
-    // covers waiting/tool (both moon spinners) and any intermediate thinking
+    // covers waiting/tool (both activity spinners) and any intermediate thinking
     // phase, so a continuous burst of tool calls does not flip tips. Clear the
     // cache only when there is no loading UI at all.
     if (effectiveMode === 'idle' || effectiveMode === 'session' || effectiveMode === 'hidden') {
@@ -2370,14 +2389,19 @@ export class KimiTUI {
     }
     this.syncTerminalProgress(this.shouldShowTerminalProgress(effectiveMode));
     const placeSpinnerInAgentSwarm = this.shouldPlaceActivitySpinnerInAgentSwarm(effectiveMode);
-    const activityModeKey = `${effectiveMode}:${placeSpinnerInAgentSwarm ? 'swarm' : 'pane'}`;
+    const retryStatus = this.state.appState.retryStatus;
+    const retryKey =
+      retryStatus === undefined
+        ? ''
+        : `:${String(retryStatus.nextAttempt)}/${String(retryStatus.maxAttempts)}:${String(retryStatus.delayMs)}`;
+    const activityModeKey = `${effectiveMode}:${placeSpinnerInAgentSwarm ? 'swarm' : 'pane'}${retryKey}`;
 
     if (
       activityModeKey === this.lastActivityMode &&
       (effectiveMode === 'waiting' || effectiveMode === 'thinking' || effectiveMode === 'tool')
     ) {
       if (placeSpinnerInAgentSwarm) {
-        this.syncAgentSwarmActivitySpinner(this.state.activitySpinner?.instance);
+        this.syncAgentSwarmActivitySpinner(this.state.activitySpinner ?? undefined);
       }
       return;
     }
@@ -2392,14 +2416,22 @@ export class KimiTUI {
         this.state.ui.requestRender();
         return;
       case 'waiting': {
-        const spinner = this.ensureActivitySpinner('moon');
+        const spinner = this.ensureActivitySpinner(
+          retryStatus === undefined
+            ? ''
+            : formatRetryStatus(
+                retryStatus,
+                this.state.appState.isCompacting ? 'compaction' : 'request',
+              ),
+          retryStatus === undefined ? undefined : (s) => currentTheme.fg('warning', s),
+        );
         this.syncAgentSwarmActivitySpinner(placeSpinnerInAgentSwarm ? spinner : undefined);
         if (placeSpinnerInAgentSwarm) break;
         this.state.activityContainer.addChild(
           new ActivityPaneComponent({
             mode: 'waiting',
             spinner,
-            tip: this.currentLoadingTip?.tip,
+            tip: retryStatus === undefined ? this.currentLoadingTip?.tip : undefined,
           }),
         );
         break;
@@ -2410,7 +2442,7 @@ export class KimiTUI {
         break;
       }
       case 'composing': {
-        const spinner = this.ensureActivitySpinner('braille', 'working...', (s) =>
+        const spinner = this.ensureActivitySpinner('working...', (s) =>
           currentTheme.fg('primary', s),
         );
         this.syncAgentSwarmActivitySpinner(undefined);
@@ -2424,7 +2456,7 @@ export class KimiTUI {
         break;
       }
       case 'tool': {
-        const spinner = this.ensureActivitySpinner('moon');
+        const spinner = this.ensureActivitySpinner();
         this.syncAgentSwarmActivitySpinner(placeSpinnerInAgentSwarm ? spinner : undefined);
         if (placeSpinnerInAgentSwarm) break;
         this.state.activityContainer.addChild(
@@ -2453,12 +2485,14 @@ export class KimiTUI {
   private resolveActivityPaneMode(): EffectiveActivityPaneMode {
     if (this.state.activeDialog === 'session-picker') return 'hidden';
     if (this.state.livePane.pendingApproval !== null) return 'hidden';
-    if (this.state.appState.isCompacting) return 'hidden';
+    if (this.state.appState.isCompacting) {
+      return this.state.appState.retryStatus === undefined ? 'hidden' : 'waiting';
+    }
     if (this.state.livePane.pendingQuestion !== null) return 'hidden';
 
     const streamingPhase = this.state.appState.streamingPhase;
 
-    // A running `!` shell command shows the moon spinner (same as `waiting`)
+    // A running `!` shell command shows the activity spinner (same as `waiting`)
     // until it finishes, signalling that input is busy / queued.
     if (streamingPhase === 'shell') return 'waiting';
 
@@ -2710,30 +2744,23 @@ export class KimiTUI {
   }
 
   private ensureActivitySpinner(
-    style: SpinnerStyle,
     label = '',
     colorFn?: (s: string) => string,
   ): MoonLoader {
-    if (this.state.activitySpinner?.style !== style) {
-      this.stopActivitySpinner();
-    }
-
     if (this.state.activitySpinner === null) {
-      const instance = new MoonLoader(this.state.ui, style, colorFn, label);
-      this.state.activitySpinner = { instance, style };
+      const instance = new MoonLoader(this.state.ui, colorFn, label);
+      this.state.activitySpinner = instance;
       return instance;
     }
 
-    this.state.activitySpinner.instance.setLabel(label);
-    if (colorFn !== undefined) {
-      this.state.activitySpinner.instance.setColorFn(colorFn);
-    }
-    return this.state.activitySpinner.instance;
+    this.state.activitySpinner.setLabel(label);
+    this.state.activitySpinner.setColorFn(colorFn);
+    return this.state.activitySpinner;
   }
 
   private stopActivitySpinner(): void {
     if (this.state.activitySpinner !== null) {
-      this.state.activitySpinner.instance.stop();
+      this.state.activitySpinner.stop();
       this.state.activitySpinner = null;
     }
   }
@@ -2908,6 +2935,10 @@ export class KimiTUI {
 
   openUndoSelector(): void {
     void slashCommands.handleUndoCommand(this, '');
+  }
+
+  copyLastAssistantMessage(): void {
+    void slashCommands.handleCopyCommand(this);
   }
 
   private mountSessionPicker(options: {

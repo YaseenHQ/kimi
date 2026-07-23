@@ -50,6 +50,7 @@ export interface EditorKeyboardHost {
   cancelRunningShellCommand(): void;
   hideSessionPicker(): void;
   openUndoSelector(): void;
+  copyLastAssistantMessage(): void;
   stop(exitCode?: number): Promise<void>;
   handlePlanToggle(next: boolean): void;
   handleInputModeChange(mode: 'prompt' | 'bash'): void;
@@ -234,6 +235,11 @@ export class EditorKeyboardController {
     editor.onToggleToolExpand = () => {
       host.track('shortcut_expand');
       host.toggleToolOutputExpansion();
+    };
+
+    editor.onCopyLastAssistant = () => {
+      host.track('shortcut_copy_message');
+      host.copyLastAssistantMessage();
     };
 
     editor.onToggleTodoExpand = (): boolean => {

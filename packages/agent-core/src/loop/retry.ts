@@ -170,7 +170,7 @@ export function retryBackoffDelays(maxAttempts: number): number[] {
  * the computed backoff — a server `Retry-After` directive takes precedence
  * over the local exponential delay.
  */
-function readRetryAfterMs(error: unknown): number | null {
+export function readRetryAfterMs(error: unknown): number | null {
   if (typeof error !== 'object' || error === null) return null;
   const value = (error as { retryAfterMs?: unknown }).retryAfterMs;
   return typeof value === 'number' && value > 0 ? value : null;
@@ -181,13 +181,13 @@ export async function sleepForRetry(delayMs: number, signal: AbortSignal): Promi
   await abortable(sleep(delayMs), signal);
 }
 
-interface RetryErrorFields {
+export interface RetryErrorFields {
   readonly errorName: string;
   readonly errorMessage: string;
   readonly statusCode?: number;
 }
 
-function retryErrorFields(error: unknown): RetryErrorFields {
+export function retryErrorFields(error: unknown): RetryErrorFields {
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorMessage: error instanceof Error ? error.message : String(error),

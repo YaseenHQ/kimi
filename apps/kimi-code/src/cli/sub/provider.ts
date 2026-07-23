@@ -1,7 +1,7 @@
 /**
  * `kimi provider` sub-command — non-interactive provider management.
  *
- * Mirrors the TUI `/provider` flow (apps/kimi-code/src/tui/commands/provider.ts)
+ * Headless counterpart to the TUI `/login` and `/logout` provider flows
  * for the custom-registry path so users can import an api.json document, drop
  * a provider, or inspect what is configured without launching the TUI.
  *

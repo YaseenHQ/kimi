@@ -1204,7 +1204,7 @@ export class OpenAIResponsesChatProvider implements ChatProvider {
   private _buildClient(apiKey: string, auth?: ProviderRequestAuth): OpenAI {
     const clientOpts: Record<string, unknown> = {
       apiKey,
-      baseURL: this._baseUrl,
+      baseURL: auth?.baseUrl ?? this._baseUrl,
     };
     const defaultHeaders = mergeRequestHeaders(this._defaultHeaders, auth?.headers);
     if (defaultHeaders !== undefined) {

@@ -50,6 +50,14 @@ const ModelAliasBaseSchema = z.object({
   displayName: z.string().optional(),
   reasoningKey: z.string().optional(),
   protocol: z.literal('anthropic').optional(),
+  // Per-model wire-type override for OpenAI-family transports. When set, the
+  // session provider manager uses this instead of provider.type for transport
+  // selection — needed for providers whose models speak different wires (e.g.
+  // xAI: grok-4.5 = Responses API, grok-4.3 = Chat Completions). Distinct from
+  // `protocol` (which carries Anthropic-transport side effects like /v1
+  // stripping and beta-API routing). Login flows stamp this; it is not meant
+  // for hand-editing.
+  wire: z.enum(['openai', 'openai_responses']).optional(),
   // Explicitly declare adaptive-thinking support, overriding the kosong
   // model-name version inference. Needed for custom-named Anthropic endpoints
   // whose model name does not encode a parseable Claude version.
@@ -79,6 +87,7 @@ export const ModelAliasOverrideSchema = ModelAliasBaseSchema.omit({
   provider: true,
   model: true,
   protocol: true,
+  wire: true,
   betaApi: true,
   baseUrl: true,
 }).partial();

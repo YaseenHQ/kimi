@@ -247,6 +247,11 @@ export class OAuthManager {
     await this.storage.remove(this.config.name);
   }
 
+  /** Persist a token obtained by a provider-specific interactive flow. */
+  async saveToken(token: TokenInfo): Promise<void> {
+    await this.storage.save(this.config.name, token);
+  }
+
   /**
    * Return a valid access_token, refreshing if within the dynamic threshold.
    * Throws if no token is persisted (caller should invoke `/login`).

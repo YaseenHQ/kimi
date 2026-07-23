@@ -9,7 +9,7 @@ const loaders: MoonLoader[] = [];
 
 function createLoader(): MoonLoader {
   const ui = { requestRender() {} } as unknown as TUI;
-  const loader = new MoonLoader(ui, 'moon');
+  const loader = new MoonLoader(ui);
   loaders.push(loader);
   return loader;
 }
@@ -20,6 +20,17 @@ afterEach(() => {
 });
 
 describe('MoonLoader', () => {
+  it('clears a previous warning color when reused without a color function', () => {
+    const ui = { requestRender() {} } as unknown as TUI;
+    const loader = new MoonLoader(ui, (value) => `<warning>${value}</warning>`, 'retrying');
+    loaders.push(loader);
+    expect(loader.renderInline()).toContain('<warning>');
+
+    loader.setColorFn(undefined);
+
+    expect(loader.renderInline()).not.toContain('<warning>');
+  });
+
   it('keeps the tip out of renderInline so it does not squeeze against the swarm progress bar', () => {
     const loader = createLoader();
     loader.setTip(' · Tip: ctrl+s: steer mid-turn');

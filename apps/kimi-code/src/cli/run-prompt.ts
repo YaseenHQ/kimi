@@ -619,6 +619,7 @@ function runPromptTurn(
         case 'compaction.blocked':
         case 'compaction.cancelled':
         case 'compaction.completed':
+        case 'compaction.retrying':
         case 'compaction.started':
         case 'cron.fired':
         case 'goal.updated':

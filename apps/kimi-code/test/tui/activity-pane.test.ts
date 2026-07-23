@@ -141,6 +141,30 @@ describe('updateActivityPane terminal progress', () => {
     expect(setProgress).toHaveBeenLastCalledWith(false);
   });
 
+  it('shows retry status while compaction is waiting to retry', () => {
+    vi.useFakeTimers();
+    try {
+      const { driver, state } = makeDriverWithTerminalProgress();
+      state.appState.isCompacting = true;
+      state.appState.retryStatus = {
+        failedAttempt: 1,
+        nextAttempt: 2,
+        maxAttempts: 5,
+        delayMs: 1_500,
+        errorName: 'APIStatusError',
+        errorMessage: 'Provider overloaded',
+        statusCode: 429,
+      };
+
+      driver.updateActivityPane();
+
+      expect(state.activitySpinner).not.toBeNull();
+      expect(strip(state.activitySpinner!.renderInline())).toContain('compaction');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps terminal progress active without showing a thinking spinner', () => {
     vi.useFakeTimers();
     try {
@@ -166,7 +190,7 @@ describe('updateActivityPane terminal progress', () => {
     }
   });
 
-  it('moves the moon spinner into the AgentSwarm progress row while active', () => {
+  it('moves the activity spinner into the AgentSwarm progress row while active', () => {
     vi.useFakeTimers();
     try {
       const { driver, state, setProgress } = makeDriverWithTerminalProgress();
@@ -179,16 +203,16 @@ describe('updateActivityPane terminal progress', () => {
       expect(setProgress).toHaveBeenLastCalledWith(true);
       expect(state.activitySpinner).not.toBeNull();
       expect(state.activityContainer.children).toHaveLength(0);
-      expect(strip(progress.render(80).join('\n'))).toContain('🌑 Working...');
+      expect(strip(progress.render(80).join('\n'))).toContain('⠋ Working...');
 
-      state.activitySpinner?.instance.stop();
+      state.activitySpinner?.stop();
       driver.sessionEventHandler.clearAgentSwarmProgress();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('keeps ended AgentSwarm progress on a placeholder instead of the moon spinner', () => {
+  it('keeps ended AgentSwarm progress on a placeholder instead of the activity spinner', () => {
     vi.useFakeTimers();
     try {
       const { driver, state } = makeDriverWithTerminalProgress();
@@ -210,9 +234,9 @@ describe('updateActivityPane terminal progress', () => {
       expect(state.activityContainer.children).toHaveLength(1);
       const output = strip(progress.render(80).join('\n'));
       expect(output).toContain('  Working...');
-      expect(output).not.toContain('🌑 Working...');
+      expect(output).not.toContain('⠋ Working...');
 
-      state.activitySpinner?.instance.stop();
+      state.activitySpinner?.stop();
       driver.sessionEventHandler.clearAgentSwarmProgress();
     } finally {
       vi.useRealTimers();

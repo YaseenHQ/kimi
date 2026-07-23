@@ -9,6 +9,7 @@ export type {
   CompactionBlockedEvent,
   CompactionCancelledEvent,
   CompactionCompletedEvent,
+  CompactionRetryingEvent,
   CompactionResult,
   CompactionStartedEvent,
   CronFiredEvent,

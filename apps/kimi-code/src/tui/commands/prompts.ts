@@ -8,6 +8,7 @@ import {
 } from '@moonshot-ai/kimi-code-sdk';
 import { capabilitiesForModel } from '@moonshot-ai/kimi-code-oauth';
 import type {
+  BrowserAuthorization,
   ManagedKimiCodeModelInfo,
   OpenPlatformDefinition,
 } from '@moonshot-ai/kimi-code-oauth';
@@ -16,24 +17,8 @@ import { ApiKeyInputDialogComponent, type ApiKeyInputResult } from '../component
 import { ChoicePickerComponent, type ChoiceOption } from '../components/dialogs/choice-picker';
 import { FeedbackInputDialogComponent, type FeedbackInputDialogResult } from '../components/dialogs/feedback-input-dialog';
 import { ModelSelectorComponent } from '../components/dialogs/model-selector';
-import { PlatformSelectorComponent } from '../components/dialogs/platform-selector';
 import type { SlashCommandHost } from './dispatch';
-
-export function promptPlatformSelection(host: SlashCommandHost): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    const selector = new PlatformSelectorComponent({
-      onSelect: (platformId) => {
-        host.restoreEditor();
-        resolve(platformId);
-      },
-      onCancel: () => {
-        host.restoreEditor();
-        resolve(undefined);
-      },
-    });
-    host.mountEditorReplacement(selector);
-  });
-}
+import { toTerminalHyperlink } from '#/utils/terminal-hyperlink';
 
 export function promptLogoutProviderSelection(
   host: SlashCommandHost,
@@ -48,6 +33,97 @@ export function promptLogoutProviderSelection(
       onSelect: (value) => {
         host.restoreEditor();
         resolve(value);
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(undefined);
+      },
+    });
+    host.mountEditorReplacement(picker);
+  });
+}
+
+export function promptProviderConfigurationRemoval(
+  host: SlashCommandHost,
+  options: readonly ChoiceOption[],
+  currentValue: string | undefined,
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const picker = new ChoicePickerComponent({
+      title: 'Remove saved provider configuration',
+      options,
+      currentValue,
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(value);
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(undefined);
+      },
+    });
+    host.mountEditorReplacement(picker);
+  });
+}
+
+export function promptConfirmProviderConfigurationRemoval(
+  host: SlashCommandHost,
+  label: string,
+  providerLabels: readonly string[],
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const picker = new ChoicePickerComponent({
+      title: `Remove ${label}?`,
+      options: [
+        {
+          value: 'remove',
+          label: 'Remove configuration',
+          description: `Deletes providers and models: ${providerLabels.join(', ')}`,
+          descriptionTone: 'warning',
+        },
+        {
+          value: 'cancel',
+          label: 'Cancel',
+          description: 'Keep the saved configuration.',
+        },
+      ],
+      currentValue: 'cancel',
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(value === 'remove');
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(false);
+      },
+    });
+    host.mountEditorReplacement(picker);
+  });
+}
+
+export function promptExistingOAuthAction(
+  host: SlashCommandHost,
+  providerName: string,
+): Promise<'current' | 'switch' | undefined> {
+  return new Promise((resolve) => {
+    const picker = new ChoicePickerComponent({
+      title: `${providerName} is already connected`,
+      options: [
+        {
+          value: 'current',
+          label: 'Use current account',
+          description: 'Keep this account and refresh its model configuration.',
+        },
+        {
+          value: 'switch',
+          label: 'Switch account',
+          description: 'Sign in again; the current credential is kept if login fails.',
+        },
+      ],
+      currentValue: 'current',
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(value as 'current' | 'switch');
       },
       onCancel: () => {
         host.restoreEditor();
@@ -125,6 +201,86 @@ export function promptApiKey(
       },
     );
     host.mountEditorReplacement(dialog);
+  });
+}
+
+export function promptOAuthAuthorizationCode(
+  host: SlashCommandHost,
+  providerName: string,
+  authorization: BrowserAuthorization,
+): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: string | undefined): void => {
+      if (settled) return;
+      settled = true;
+      host.restoreEditor();
+      resolve(value);
+    };
+    const dialog = new ApiKeyInputDialogComponent(
+      providerName,
+      [
+        authorization.instructions,
+        toTerminalHyperlink('Open authorization page', authorization.url),
+      ],
+      (result: ApiKeyInputResult) => {
+        finish(result.kind === 'ok' ? result.value : undefined);
+      },
+      {
+        title: `Complete ${providerName} login`,
+        mask: false,
+        emptyHint: 'Paste the authorization code or final redirect URL.',
+      },
+    );
+    host.mountEditorReplacement(dialog);
+    // When the owning login flow's local callback server captures the code,
+    // it aborts this signal; resolve and unmount so the user is not left
+    // staring at a now-redundant paste dialog.
+    if (authorization.signal !== undefined) {
+      if (authorization.signal.aborted) {
+        finish(undefined);
+      } else {
+        authorization.signal.addEventListener(
+          'abort',
+          () => {
+            finish(undefined);
+          },
+          { once: true },
+        );
+      }
+    }
+  });
+}
+
+/** Choose the OpenAI Codex login method: browser (PKCE + local server) or device-code. */
+export function promptOpenAICodexLoginMethod(
+  host: SlashCommandHost,
+): Promise<'browser' | 'device_code' | undefined> {
+  return new Promise((resolve) => {
+    const picker = new ChoicePickerComponent({
+      title: 'Select OpenAI Codex login method',
+      options: [
+        {
+          value: 'browser',
+          label: 'Browser login (default)',
+          description: 'Opens a browser window; auto-captures the redirect.',
+        },
+        {
+          value: 'device_code',
+          label: 'Device code login (headless)',
+          description: 'For machines without a local browser.',
+        },
+      ],
+      onSelect: (value) => {
+        host.restoreEditor();
+        resolve(value as 'browser' | 'device_code');
+      },
+      onCancel: () => {
+        host.restoreEditor();
+        resolve(undefined);
+      },
+    });
+    host.mountEditorReplacement(picker);
   });
 }
 

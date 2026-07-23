@@ -14,7 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApprovalPanelComponent } from '#/tui/components/dialogs/approval-panel';
 import { EffortSelectorComponent } from '#/tui/components/dialogs/effort-selector';
 import { KIMI_CODE_PLUGIN_MARKETPLACE_URL } from '#/constant/app';
-import { MOON_SPINNER_FRAMES } from '#/tui/constant/rendering';
+import { BRAILLE_SPINNER_FRAMES } from '#/tui/constant/rendering';
 import {
   AgentSwarmProgressComponent,
   agentSwarmGridHeightForTerminalRows,
@@ -2196,6 +2196,55 @@ command = "vim"
     driver.state.editor.onCtrlC?.();
 
     expect(session.cancelCompaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows compaction retry status and clears it when compaction completes', async () => {
+    const { driver } = await makeDriver();
+    const sendQueued = vi.fn();
+    driver.sessionEventHandler.handleEvent(
+      {
+        type: 'compaction.started',
+        agentId: 'main',
+        sessionId: 'ses-1',
+        trigger: 'manual',
+      } as Event,
+      sendQueued,
+    );
+    driver.sessionEventHandler.handleEvent(
+      {
+        type: 'compaction.retrying',
+        agentId: 'main',
+        sessionId: 'ses-1',
+        failedAttempt: 1,
+        nextAttempt: 2,
+        maxAttempts: 5,
+        delayMs: 1_500,
+        errorName: 'APIStatusError',
+        errorMessage: 'Provider overloaded',
+        statusCode: 429,
+      } as Event,
+      sendQueued,
+    );
+
+    expect(driver.state.appState.isCompacting).toBe(true);
+    expect(driver.state.appState.retryStatus).toMatchObject({ nextAttempt: 2, maxAttempts: 5 });
+
+    driver.sessionEventHandler.handleEvent(
+      {
+        type: 'compaction.completed',
+        agentId: 'main',
+        sessionId: 'ses-1',
+        result: {
+          summary: 'Compacted summary.',
+          compactedCount: 2,
+          tokensBefore: 100,
+          tokensAfter: 20,
+        },
+      } as Event,
+      sendQueued,
+    );
+
+    expect(driver.state.appState.retryStatus).toBeUndefined();
   });
 
   it('clears editor text before cancelling compaction on Ctrl-C', async () => {
@@ -5137,10 +5186,10 @@ command = "vim"
     expect(stripSgr(renderTranscript(driver))).toContain('visible reasoning');
   });
 
-  it('keeps the waiting moon spinner while reasoning streams only empty (encrypted) thinking deltas', async () => {
+  it('keeps the waiting activity spinner while reasoning streams only empty (encrypted) thinking deltas', async () => {
     const { driver } = await makeDriver();
 
-    // Turn begins -> waiting mode shows the moon spinner.
+    // Turn begins -> waiting mode shows the activity spinner.
     driver.sessionEventHandler.handleEvent(
       {
         type: 'turn.started',
@@ -5166,13 +5215,13 @@ command = "vim"
       );
     }
 
-    // The moon must stay up: still waiting, no orphan thinking component, and
-    // the activity pane still renders a moon frame (no blank, spinner-less gap).
+    // The spinner must stay up: still waiting, no orphan thinking component, and
+    // the activity pane still renders a spinner frame (no blank, spinner-less gap).
     expect(driver.state.appState.streamingPhase).toBe('waiting');
     expect(driver.state.livePane.mode).toBe('waiting');
     expect(driver.streamingUI.hasActiveThinkingComponent()).toBe(false);
     const activity = stripSgr(renderActivity(driver));
-    expect(MOON_SPINNER_FRAMES.some((frame) => activity.includes(frame))).toBe(true);
+    expect(BRAILLE_SPINNER_FRAMES.some((frame) => activity.includes(frame))).toBe(true);
 
     // Real thinking text finally arrives -> transition into thinking mode.
     driver.sessionEventHandler.handleEvent(

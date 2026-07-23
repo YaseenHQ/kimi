@@ -28,7 +28,7 @@ export { handlePluginsCommand } from './plugins';
 export { handleReloadCommand, handleReloadTuiCommand } from './reload';
 export { handleGoalCommand, parseGoalCommand } from './goal';
 export { goalArgumentCompletions } from './registry';
-export { handleForkCommand, handleInitCommand, handleTitleCommand } from './session';
+export { handleForkCommand, handleInitCommand, handleTitleCommand, handleTreeCommand } from './session';
 export { handleUndoCommand } from './undo';
 export { handleWebCommand } from './web';
 export {
@@ -38,6 +38,5 @@ export {
   promptLogoutProviderSelection,
   promptModelSelectionForCatalog,
   promptModelSelectionForOpenPlatform,
-  promptPlatformSelection,
   runModelSelector,
 } from './prompts';

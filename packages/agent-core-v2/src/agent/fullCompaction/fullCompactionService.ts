@@ -17,7 +17,12 @@ import type { ContextMessage } from '#/agent/contextMemory/types';
 import { IAgentContextSizeService } from '#/agent/contextSize/contextSize';
 import { IAgentLLMRequesterService, type AgentLLMRequestFinish } from '#/agent/llmRequester/llmRequester';
 import type { LLMRequestTrace } from '#/kosong/contract/requestTrace';
-import { retryBackoffDelays, sleepForRetry } from '#/_base/utils/retry';
+import {
+  readRetryAfterMs,
+  retryBackoffDelays,
+  retryErrorFields,
+  sleepForRetry,
+} from '#/_base/utils/retry';
 import { IAgentLoopService, type LoopErrorContext } from '#/agent/loop/loop';
 import { isAbortError } from '#/_base/utils/abort';
 import { IAgentProfileService, type ProfileModelContext } from '#/agent/profile/profile';
@@ -617,7 +622,19 @@ export class AgentFullCompactionService extends Disposable implements IAgentFull
           if (retryCount + 1 >= MAX_COMPACTION_RETRY_ATTEMPTS) {
             throw error;
           }
-          await sleepForRetry(delays[retryCount]!, signal);
+          const failedAttempt = retryCount + 1;
+          const retryError = unwrapErrorCause(error);
+          const delayMs = readRetryAfterMs(retryError) ?? delays[retryCount] ?? 0;
+          signal.throwIfAborted();
+          this.eventBus.publish({
+            type: 'compaction.retrying',
+            failedAttempt,
+            nextAttempt: failedAttempt + 1,
+            maxAttempts: MAX_COMPACTION_RETRY_ATTEMPTS,
+            delayMs,
+            ...retryErrorFields(retryError),
+          });
+          await sleepForRetry(delayMs, signal);
           retryCount += 1;
         }
       }

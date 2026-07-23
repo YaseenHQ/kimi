@@ -122,6 +122,7 @@ export type {
   KimiAuthCreateFeedbackUploadUrlResult,
   KimiAuthFeedbackUploadPart,
   KimiAuthLoginResult,
+  KimiAuthLogoutOptions,
   KimiAuthLogoutResult,
   KimiAuthSubmitFeedbackInput,
 } from '#/auth';

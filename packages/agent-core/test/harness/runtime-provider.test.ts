@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { KimiConfig, ModelAlias } from '../../src/config';
 import { ErrorCodes, KimiError } from '../../src/errors';
@@ -985,6 +985,26 @@ describe('ProviderManager OAuth auth', () => {
     await expect(resolveAuth!(async () => 'ok')).rejects.toMatchObject({
       code: ErrorCodes.AUTH_LOGIN_REQUIRED,
     });
+  });
+
+  it('uses provider-specific OAuth request headers when the token provider supplies them', async () => {
+    const getAccessToken = vi.fn(async () => 'bare-token');
+    const getRequestAuth = vi.fn(async () => ({
+      apiKey: 'codex-token',
+      headers: { 'chatgpt-account-id': 'account-123' },
+    }));
+    const manager = new ProviderManager({
+      config: oauthConfig(),
+      resolveOAuthTokenProvider: () => ({ getAccessToken, getRequestAuth }),
+    });
+
+    const resolveAuth = manager.resolveAuth('kimi-code/kimi-for-coding');
+    await expect(resolveAuth!(async (auth) => auth)).resolves.toEqual({
+      apiKey: 'codex-token',
+      headers: { 'chatgpt-account-id': 'account-123' },
+    });
+    expect(getRequestAuth).toHaveBeenCalledWith(undefined);
+    expect(getAccessToken).not.toHaveBeenCalled();
   });
 });
 

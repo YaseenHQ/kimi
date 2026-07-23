@@ -105,6 +105,7 @@ describe('Event public types', () => {
         case 'subagent.completed':
         case 'subagent.failed':
         case 'compaction.started':
+        case 'compaction.retrying':
         case 'compaction.blocked':
         case 'compaction.cancelled':
         case 'compaction.completed':

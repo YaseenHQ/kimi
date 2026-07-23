@@ -26,7 +26,9 @@ import { stripDynamicToolContext } from '../context/dynamic-tools';
 import { isAbortError } from '../../loop/errors';
 import {
   findAPIStatusError,
+  readRetryAfterMs,
   retryBackoffDelays,
+  retryErrorFields,
   sleepForRetry,
 } from '../../loop/retry';
 import { LLMRequestTraceState } from '../../loop/llm';
@@ -572,7 +574,18 @@ export class FullCompaction {
           if (retryCount + 1 >= MAX_COMPACTION_RETRY_ATTEMPTS) {
             throw error;
           }
-          await sleepForRetry(delays[retryCount]!, signal);
+          const failedAttempt = retryCount + 1;
+          const delayMs = readRetryAfterMs(error) ?? delays[retryCount] ?? 0;
+          signal.throwIfAborted();
+          this.agent.emitEvent({
+            type: 'compaction.retrying',
+            failedAttempt,
+            nextAttempt: failedAttempt + 1,
+            maxAttempts: MAX_COMPACTION_RETRY_ATTEMPTS,
+            delayMs,
+            ...retryErrorFields(error),
+          });
+          await sleepForRetry(delayMs, signal);
           retryCount += 1;
         }
       }

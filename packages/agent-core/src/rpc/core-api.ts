@@ -77,6 +77,10 @@ export interface DeleteSessionPayload {
   readonly sessionId: string;
 }
 
+export interface ListSessionTurnsPayload {
+  readonly sessionId: string;
+}
+
 export interface ResumeSessionPayload {
   readonly sessionId: string;
   readonly mcpServers?: Readonly<Record<string, McpServerConfig>>;
@@ -291,6 +295,12 @@ export interface GetBackgroundPayload {
   readonly activeOnly?: boolean;
   /** Caps the number of tasks returned. When omitted, returns all matching tasks. */
   readonly limit?: number;
+}
+export interface SessionTurn {
+  /** Zero-based user-visible turn index accepted by forkSession. */
+  readonly turnIndex: number;
+  /** Single-line prompt metadata suitable for history selectors. */
+  readonly prompt: string;
 }
 export interface SkillSummary {
   readonly name: string;
@@ -545,6 +555,7 @@ export interface CoreAPI extends SessionAPIWithId {
   reloadSession: (payload: ReloadSessionPayload) => ResumeSessionResult;
   forkSession: (payload: ForkSessionPayload) => ResumeSessionResult;
   listSessions: (payload: ListSessionsPayload) => readonly SessionSummary[];
+  listSessionTurns: (payload: ListSessionTurnsPayload) => readonly SessionTurn[];
   exportSession: (payload: ExportSessionPayload) => ExportSessionResult;
   listWorkspaceSkills: (payload: ListWorkspaceSkillsPayload) => Promise<readonly SkillSummary[]>;
   listPlugins: (payload: EmptyPayload) => readonly PluginSummary[];

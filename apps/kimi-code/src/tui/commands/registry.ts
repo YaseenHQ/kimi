@@ -192,13 +192,6 @@ export const BUILTIN_SLASH_COMMANDS = [
     availability: 'always',
   },
   {
-    name: 'provider',
-    aliases: ['providers'],
-    description: 'Manage AI providers (add / delete / refresh)',
-    priority: 95,
-    availability: 'always',
-  },
-  {
     name: 'btw',
     aliases: [],
     description: 'Ask a forked side agent a question',
@@ -311,6 +304,13 @@ export const BUILTIN_SLASH_COMMANDS = [
     priority: 80,
   },
   {
+    name: 'tree',
+    aliases: [],
+    description: 'Browse previous turns and fork from the selected point',
+    priority: 80,
+    availability: 'idle-only',
+  },
+  {
     name: 'title',
     aliases: ['rename'],
     description: 'Set or show session title',
@@ -363,13 +363,13 @@ export const BUILTIN_SLASH_COMMANDS = [
   {
     name: 'logout',
     aliases: ['disconnect'],
-    description: 'Log out of a configured provider',
+    description: 'Log out providers or remove saved provider configuration',
     priority: 40,
   },
   {
     name: 'login',
     aliases: [],
-    description: 'Select a platform and authenticate',
+    description: 'Sign in with an account (OAuth) or connect with an API key',
     priority: 40,
   },
   {

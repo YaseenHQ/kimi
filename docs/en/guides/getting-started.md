@@ -108,7 +108,7 @@ On first launch you need to configure an API source. In the interactive UI, ente
 To sign out, enter `/logout` to clear the current credentials.
 
 ::: tip Using other AI providers
-If you want to connect Anthropic, OpenAI, Google, or other providers, edit `~/.kimi-code/config.toml` directly to configure the API key. See [Providers and models](../configuration/providers.md) for details. For the full reference of all config options, see [Configuration files](../configuration/config-files.md), [Environment variables](../configuration/env-vars.md), and [Configuration overrides](../configuration/overrides.md).
+To connect Anthropic, OpenAI, Google, or another provider, run `/login` and choose an account (OAuth) or API-key route. You can also edit `~/.kimi-code/config.toml` directly. See [Providers and models](../configuration/providers.md) for details.
 :::
 
 ## Your first conversation

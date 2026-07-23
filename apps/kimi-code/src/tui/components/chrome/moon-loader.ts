@@ -4,12 +4,8 @@ import type { TUI } from '@moonshot-ai/pi-tui';
 import {
   BRAILLE_SPINNER_FRAMES,
   BRAILLE_SPINNER_INTERVAL_MS,
-  MOON_SPINNER_FRAMES,
-  MOON_SPINNER_INTERVAL_MS,
 } from '#/tui/constant/rendering';
 import { currentTheme } from '#/tui/theme';
-
-export type SpinnerStyle = 'moon' | 'braille';
 
 export class MoonLoader extends Text {
   private currentFrame = 0;
@@ -31,14 +27,13 @@ export class MoonLoader extends Text {
 
   constructor(
     ui: TUI,
-    style: SpinnerStyle = 'moon',
     colorFn?: (s: string) => string,
     label: string = '',
   ) {
     super('', 1, 0);
     this.ui = ui;
-    this.frames = style === 'moon' ? [...MOON_SPINNER_FRAMES] : [...BRAILLE_SPINNER_FRAMES];
-    this.interval = style === 'moon' ? MOON_SPINNER_INTERVAL_MS : BRAILLE_SPINNER_INTERVAL_MS;
+    this.frames = [...BRAILLE_SPINNER_FRAMES];
+    this.interval = BRAILLE_SPINNER_INTERVAL_MS;
     this.colorFn = colorFn;
     this.label = label;
     this.start();
@@ -68,7 +63,7 @@ export class MoonLoader extends Text {
     this.updateDisplay();
   }
 
-  setColorFn(colorFn: (s: string) => string): void {
+  setColorFn(colorFn: ((s: string) => string) | undefined): void {
     this.colorFn = colorFn;
     this.updateDisplay();
   }

@@ -18,7 +18,12 @@ import {
   promptMetadataTextFromPluginCommand,
   promptMetadataTextFromSkill,
 } from '#/session/prompt-metadata';
-import type { JsonObject, ListSessionsPayload, SessionSummary } from '#/rpc/core-api';
+import type {
+  JsonObject,
+  ListSessionsPayload,
+  SessionSummary,
+  SessionTurn,
+} from '#/rpc/core-api';
 import {
   FileSystemAgentRecordPersistence,
   type AgentRecord,
@@ -190,6 +195,23 @@ export class SessionStore {
   async get(id: string): Promise<SessionSummary> {
     const entry = await this.findExistingSessionEntry(id);
     return this.summaryFromDir(id, entry.sessionDir, entry.workDir);
+  }
+
+  async listTurns(id: string): Promise<readonly SessionTurn[]> {
+    const entry = await this.findExistingSessionEntry(id);
+    const persistence = new FileSystemAgentRecordPersistence(
+      join(entry.sessionDir, 'agents', 'main', 'wire.jsonl'),
+    );
+    const records = await readAgentRecords(persistence);
+    const turns: SessionTurn[] = [];
+    for (const record of records) {
+      if (!isUserVisibleTurnRecord(record)) continue;
+      turns.push({
+        turnIndex: turns.length,
+        prompt: promptMetadataFromTurnRecord(record) ?? 'User turn',
+      });
+    }
+    return turns;
   }
 
   async rename(id: string, title: string): Promise<void> {

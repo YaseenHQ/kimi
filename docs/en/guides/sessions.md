@@ -61,6 +61,7 @@ You can manage sessions without leaving the terminal. The following slash comman
 - **`/new`** (alias `/clear`): switch to a new session, discarding the current context.
 - **`/sessions`** (alias `/resume`): browse and resume a previous session.
 - **`/fork`**: fork the current session (see below).
+- **`/tree`**: browse earlier user turns and fork from the selected point. Press `Ctrl-X` to copy the highlighted turn without leaving the picker.
 - **`/title <text>`** (alias `/rename`): set a session title for easier identification; without arguments, displays the current title.
 
 ## Context compression
@@ -83,6 +84,12 @@ To explore a new direction without disrupting the current conversation, use `/fo
 
 ```
 /fork
+```
+
+To branch from an earlier point instead, open the turn picker:
+
+```
+/tree
 ```
 
 The two resulting sessions are completely independent and do not affect each other. You can switch back to the original at any time using `/sessions`. A saved `/goal` is not copied to the fork. Start a new goal there if you want autonomous goal work.

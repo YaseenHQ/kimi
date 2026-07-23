@@ -496,6 +496,29 @@ describe('Session.prompt events', () => {
     }
   });
 
+  it('lists persisted user turns without reloading an active session', async () => {
+    const homeDir = await makeTempDir();
+    const workDir = await makeTempDir();
+    const harness = createKimiHarness({ identity: TEST_IDENTITY, homeDir });
+
+    try {
+      await configureFakeProvider(harness);
+      const session = await harness.createSession({ id: 'ses_turn_list', workDir });
+      await runPrompt(session, 'first question', 'first answer');
+      await runPrompt(session, 'second question', 'second answer');
+      await runPrompt(session, 'third question', 'third answer');
+
+      expect(await session.listTurns()).toEqual([
+        { turnIndex: 0, prompt: 'first question' },
+        { turnIndex: 1, prompt: 'second question' },
+        { turnIndex: 2, prompt: 'third question' },
+      ]);
+      expect(harness.getSession(session.id)).toBe(session);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('returns the requested identity for a historical fork', async () => {
     const homeDir = await makeTempDir();
     const workDir = await makeTempDir();

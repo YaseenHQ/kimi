@@ -110,6 +110,7 @@ import type {
   InstallPluginPayload,
   ImportContextPayload,
   ListSessionsPayload,
+  ListSessionTurnsPayload,
   ListWorkspaceSkillsPayload,
   McpServerInfo,
   McpStartupMetrics,
@@ -615,6 +616,11 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
     return this.sessionStore.list(input);
   }
 
+  async listSessionTurns({ sessionId }: ListSessionTurnsPayload) {
+    await this.sessions.get(sessionId)?.flushMetadata();
+    return this.sessionStore.listTurns(sessionId);
+  }
+
   async renameSession({ sessionId, ...payload }: RenameSessionRequest): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (session !== undefined) {
@@ -697,6 +703,22 @@ export class KimiCore implements PromisableMethods<CoreAPI> {
 
     if (config.defaultProvider === input.providerId) {
       config.defaultProvider = undefined;
+    }
+
+    // The managed Kimi Code provider owns the moonshot search/fetch service
+    // entries written at login (applyManagedKimiCodeConfig). The unified logout
+    // path passes deprovisionConfig:false, which skips the
+    // applyManagedKimiCodeLogoutConfig hook that would otherwise clean them —
+    // so without this, logging out of Kimi Code leaves orphaned service config
+    // pointing at dead OAuth refs. Gated to the Kimi provider only: removing a
+    // different provider (e.g. github-copilot) must never touch Kimi's still-
+    // active services. Mirrors managed-kimi-code.ts services cleanup.
+    if (input.providerId === KIMI_CODE_PROVIDER_NAME && config.services !== undefined) {
+      delete config.services.moonshotSearch;
+      delete config.services.moonshotFetch;
+      if (Object.keys(config.services).length === 0) {
+        config.services = undefined;
+      }
     }
 
     await writeConfigFile(this.configPath, config);

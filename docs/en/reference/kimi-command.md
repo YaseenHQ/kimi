@@ -297,7 +297,7 @@ kimi vis --host 0.0.0.0 --port 8123 --no-open
 
 ### `kimi provider`
 
-Manage providers in the shell — the non-interactive equivalent of `/provider` in the TUI. Suitable for scripted deployments, CI initialization, and one-line setup on a new machine.
+Manage providers non-interactively from the shell. Suitable for scripted deployments, CI initialization, and one-line setup on a new machine.
 
 ```sh
 kimi provider <action> [options]

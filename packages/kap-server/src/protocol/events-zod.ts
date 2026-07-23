@@ -31,6 +31,7 @@ import type {
   CompactionBlockedEvent,
   CompactionCancelledEvent,
   CompactionCompletedEvent,
+  CompactionRetryingEvent,
   CompactionStartedEvent,
 } from '@moonshot-ai/agent-core-v2/agent/fullCompaction/compactionOps';
 import type { CompactionResult } from '@moonshot-ai/agent-core-v2/agent/fullCompaction/types';
@@ -813,6 +814,17 @@ export const compactionStartedEventSchema = z.object({
   instruction: z.string().optional(),
 }) satisfies z.ZodType<CompactionStartedEvent>;
 
+export const compactionRetryingEventSchema = z.object({
+  type: z.literal('compaction.retrying'),
+  failedAttempt: z.number(),
+  nextAttempt: z.number(),
+  maxAttempts: z.number(),
+  delayMs: z.number(),
+  errorName: z.string(),
+  errorMessage: z.string(),
+  statusCode: z.number().optional(),
+}) satisfies z.ZodType<CompactionRetryingEvent>;
+
 export const compactionBlockedEventSchema = z.object({
   type: z.literal('compaction.blocked'),
   turnId: z.number().optional(),
@@ -948,6 +960,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   subagentCompletedEventSchema,
   subagentFailedEventSchema,
   compactionStartedEventSchema,
+  compactionRetryingEventSchema,
   compactionBlockedEventSchema,
   compactionCancelledEventSchema,
   compactionCompletedEventSchema,

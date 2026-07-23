@@ -4,6 +4,7 @@ import {
   type AgentContextData,
   type KimiErrorCode,
   type SwarmModeTrigger,
+  type SessionTurn,
 } from '@moonshot-ai/agent-core';
 
 import { type ApprovalHandler, type Event, type QuestionHandler } from '#/events';
@@ -312,6 +313,11 @@ export class Session {
   async getContext(): Promise<AgentContextData> {
     this.ensureOpen();
     return this.rpc.getContext({ sessionId: this.id });
+  }
+
+  async listTurns(): Promise<readonly SessionTurn[]> {
+    this.ensureOpen();
+    return this.rpc.listSessionTurns({ sessionId: this.id });
   }
 
   async getUsage(): Promise<SessionUsage> {

@@ -4,10 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   applyManagedKimiCodeConfig,
+  ANTHROPIC_PROVIDER_NAME,
   KIMI_CODE_PROVIDER_NAME,
   KimiOAuthToolkit,
+  OPENAI_CODEX_OAUTH_FLOW_CONFIG,
   resolveKimiCodeOAuthKey,
   resolveKimiTokenStorageName,
+  XAI_OAUTH_FLOW_CONFIG,
   type ManagedKimiConfigShape,
   type TokenInfo,
   type TokenStorage,
@@ -105,6 +108,41 @@ describe('resolveKimiTokenStorageName', () => {
 });
 
 describe('KimiOAuthToolkit', () => {
+  it('replaces an existing token only after a forced token flow succeeds', async () => {
+    const storage = new MemoryTokenStorage();
+    storage.tokens.set('anthropic', token('old-access'));
+    const toolkit = new KimiOAuthToolkit({ storage, now: () => 100 });
+
+    const acquire = vi.fn(async () => token('new-access'));
+    await toolkit.loginWithToken(
+      ANTHROPIC_PROVIDER_NAME,
+      { key: 'oauth/anthropic' },
+      acquire,
+      { forceLogin: true },
+    );
+
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(storage.tokens.get('anthropic')?.accessToken).toBe('new-access');
+  });
+
+  it('preserves the existing token when a forced token flow fails', async () => {
+    const storage = new MemoryTokenStorage();
+    storage.tokens.set('anthropic', token('old-access'));
+    const toolkit = new KimiOAuthToolkit({ storage, now: () => 100 });
+
+    await expect(
+      toolkit.loginWithToken(
+        ANTHROPIC_PROVIDER_NAME,
+        { key: 'oauth/anthropic' },
+        async () => {
+          throw new Error('cancelled');
+        },
+        { forceLogin: true },
+      ),
+    ).rejects.toThrow('cancelled');
+    expect(storage.tokens.get('anthropic')?.accessToken).toBe('old-access');
+  });
+
   it('can be constructed without host identity', async () => {
     const storage = new MemoryTokenStorage();
     storage.tokens.set('kimi-code', token('access-1'));
@@ -131,6 +169,146 @@ describe('KimiOAuthToolkit', () => {
       providers: [{ providerName: KIMI_CODE_PROVIDER_NAME, hasToken: true }],
     });
     await expect(toolkit.tokenProvider().getAccessToken()).resolves.toBe('access-1');
+  });
+
+  it('runs xAI through Kimi token storage and OAuthManager lifecycle', async () => {
+    const storage = new MemoryTokenStorage();
+    const responses = [
+      new Response(
+        JSON.stringify({
+          device_code: 'xai-device',
+          user_code: 'XAI-CODE',
+          verification_uri: 'https://auth.x.ai/device',
+          expires_in: 600,
+          interval: 1,
+        }),
+        { status: 200 },
+      ),
+      new Response(
+        JSON.stringify({
+          access_token: 'xai-access',
+          refresh_token: 'xai-refresh',
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      ),
+    ];
+    vi.stubGlobal('fetch', vi.fn(async () => responses.shift()!));
+    const toolkit = new KimiOAuthToolkit({
+      homeDir: join('/tmp', 'kimi-oauth-toolkit-test'),
+      storage,
+      sleep: async () => {},
+    });
+
+    const oauthRef = { key: 'oauth/xai' };
+    const onDeviceCode = vi.fn();
+    await toolkit.login(XAI_OAUTH_FLOW_CONFIG.name, {
+      oauthRef,
+      onDeviceCode,
+      provisionConfig: false,
+    });
+
+    expect(onDeviceCode).toHaveBeenCalledWith(
+      expect.objectContaining({ userCode: 'XAI-CODE' }),
+    );
+    await expect(toolkit.status(XAI_OAUTH_FLOW_CONFIG.name, oauthRef)).resolves.toEqual({
+      providers: [{ providerName: 'xai', hasToken: true }],
+    });
+    await expect(
+      toolkit.tokenProvider(XAI_OAUTH_FLOW_CONFIG.name, oauthRef).getAccessToken(),
+    ).resolves.toBe('xai-access');
+    await toolkit.logout(XAI_OAUTH_FLOW_CONFIG.name, oauthRef);
+    await expect(toolkit.status(XAI_OAUTH_FLOW_CONFIG.name, oauthRef)).resolves.toEqual({
+      providers: [{ providerName: 'xai', hasToken: false }],
+    });
+  });
+
+  it('runs OpenAI Codex through Kimi token storage and OAuthManager lifecycle', async () => {
+    const storage = new MemoryTokenStorage();
+    const responses = [
+      new Response(
+        JSON.stringify({
+          device_auth_id: 'device-auth',
+          user_code: 'OPENAI-CODE',
+          interval: 1,
+        }),
+        { status: 200 },
+      ),
+      new Response(
+        JSON.stringify({ authorization_code: 'authorization', code_verifier: 'verifier' }),
+        { status: 200 },
+      ),
+      new Response(
+        JSON.stringify({
+          access_token: 'header.payload.signature',
+          refresh_token: 'codex-refresh',
+          expires_in: 3600,
+        }),
+        { status: 200 },
+      ),
+    ];
+    vi.stubGlobal('fetch', vi.fn(async () => responses.shift()!));
+    const toolkit = new KimiOAuthToolkit({
+      homeDir: join('/tmp', 'kimi-oauth-toolkit-test'),
+      storage,
+      sleep: async () => {},
+    });
+
+    const oauthRef = { key: 'oauth/openai-codex' };
+    const onDeviceCode = vi.fn();
+    await toolkit.login(OPENAI_CODEX_OAUTH_FLOW_CONFIG.name, {
+      oauthRef,
+      onDeviceCode,
+      provisionConfig: false,
+    });
+
+    expect(onDeviceCode).toHaveBeenCalledWith(
+      expect.objectContaining({ userCode: 'OPENAI-CODE' }),
+    );
+    await expect(
+      toolkit
+        .tokenProvider(OPENAI_CODEX_OAUTH_FLOW_CONFIG.name, oauthRef)
+        .getAccessToken(),
+    ).resolves.toBe('header.payload.signature');
+  });
+
+  it('runs Anthropic PKCE login through the browser authorization callback', async () => {
+    const storage = new MemoryTokenStorage();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            access_token: 'sk-ant-oat-test',
+            refresh_token: 'anthropic-refresh',
+            expires_in: 3600,
+            token_type: 'Bearer',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+    const toolkit = new KimiOAuthToolkit({
+      homeDir: join('/tmp', 'kimi-oauth-toolkit-test'),
+      storage,
+    });
+    const onBrowserAuthorization = vi.fn(async ({ url }: { url: string }) => {
+      const state = new URL(url).searchParams.get('state');
+      return `authorization-code#${state ?? ''}`;
+    });
+
+    await toolkit.login(ANTHROPIC_PROVIDER_NAME, {
+      oauthRef: { key: 'oauth/anthropic' },
+      onBrowserAuthorization,
+      provisionConfig: false,
+    });
+
+    expect(onBrowserAuthorization).toHaveBeenCalledOnce();
+    await expect(
+      toolkit
+        .tokenProvider(ANTHROPIC_PROVIDER_NAME, { key: 'oauth/anthropic' })
+        .getAccessToken(),
+    ).resolves.toBe('sk-ant-oat-test');
   });
 
   it('resolves bearer token providers using the configured oauth key', async () => {

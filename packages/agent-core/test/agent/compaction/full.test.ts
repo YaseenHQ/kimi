@@ -607,6 +607,18 @@ describe('FullCompaction', () => {
     await completed;
 
     expect(attempts).toBe(2);
+    expect(ctx.allEvents).toContainEqual(
+      expect.objectContaining({
+        event: 'compaction.retrying',
+        args: expect.objectContaining({
+          failedAttempt: 1,
+          nextAttempt: 2,
+          maxAttempts: 5,
+          errorName: 'APIConnectionError',
+          errorMessage: 'socket hang up',
+        }),
+      }),
+    );
     expect(records).toContainEqual({
       event: 'compaction_finished',
       properties: expect.objectContaining({
