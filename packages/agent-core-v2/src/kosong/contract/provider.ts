@@ -72,6 +72,7 @@ export interface StreamedMessage {
 export interface ProviderRequestAuth {
   apiKey?: string;
   headers?: Record<string, string>;
+  baseUrl?: string;
 }
 
 /**

@@ -39,7 +39,7 @@ import type { TestAgentContext, TestAgentOptions, TestAgentServiceOverride } fro
 import { appServices, createCommandRunner, execEnvServices, hostEnvironmentServices, sessionServices, testAgent } from '../../harness';
 import {
   IAgentFullCompactionService,
-  IOAuthService,
+  IModelOAuthTokens,
   IAgentProfileService,
   IAgentToolRegistryService,
   ISessionTodoService,
@@ -2229,6 +2229,41 @@ describe('FullCompaction', () => {
     await ctx.expectResumeMatches();
   });
 
+  it('triggers preemptive compaction against the declared input cap, not the total window', async () => {
+    let callCount = 0;
+    const generate: GenerateFn = async (_provider, _system, _tools, _history, callbacks) => {
+      callCount += 1;
+      if (callCount === 1) {
+        return textResult('Preemptive summary under the input cap.');
+      }
+      await callbacks?.onMessagePart?.({ type: 'text', text: 'Answered after input-cap compaction.' });
+      return textResult('Answered after input-cap compaction.');
+    };
+    const ctx = testAgent({ generate });
+    ctx.configure({
+      provider: CATALOGUED_PROVIDER,
+      modelCapabilities: {
+        ...CATALOGUED_MODEL_CAPABILITIES,
+        max_context_tokens: 200_000,
+        max_input_tokens: 150_000,
+      },
+      tools: SNAPSHOT_VISIBLE_TOOLS,
+    });
+    // 160k sits between the input-cap trigger (150k × 0.85 = 127.5k) and the
+    // total-window trigger (200k × 0.85 = 170k): compaction must fire only
+    // because the input cap is the prompt budget.
+    ctx.appendExchange(1, 'old user one', 'old assistant one', 160_000);
+    ctx.newEvents();
+
+    await ctx.rpc.prompt({ input: [{ type: 'text', text: 'continue' }] });
+    const events = await ctx.untilTurnEnd();
+
+    expect(callCount).toBe(2);
+    expect(events).toContainEqual(
+      expect.objectContaining({ event: 'compaction.started' }),
+    );
+  });
+
   it('honors the observed provider window over a declared input cap', async () => {
     let callCount = 0;
     const generate: GenerateFn = async (_provider, _system, _tools, _history, callbacks) => {
@@ -2912,9 +2947,18 @@ function oauthTestAgentOptions(
       },
     },
     services: appServices((reg) => {
-      reg.definePartialInstance(IOAuthService, {
-        resolveTokenProvider: () => ({ getAccessToken }),
-      });
+      // The catalog's OAuth port is `IModelOAuthTokens` (the app/kosongConfig
+      // adapter delegates it to IOAuthService in production); stub the port
+      // directly, mirroring the adapter's force-flag normalization.
+      reg.defineInstance(IModelOAuthTokens, {
+        _serviceBrand: undefined,
+        hasCachedAccessToken: () => Promise.resolve(true),
+        getRequestAuth: async (_provider, _oauthRef, options) => ({
+          apiKey: await getAccessToken(
+            options?.force === true ? { force: true } : undefined,
+          ),
+        }),
+      } satisfies IModelOAuthTokens);
     }),
   };
 }

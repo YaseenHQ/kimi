@@ -7,9 +7,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import {
+  ANTHROPIC_PROVIDER_NAME,
   clearManagedKimiCodeConfig,
+  OPENAI_CODEX_PROVIDER_NAME,
   resolveKimiCodeOAuthKey,
   resolveKimiCodeRuntimeAuth,
+  XAI_PROVIDER_NAME,
 } from '@moonshot-ai/kimi-code-oauth';
 
 import { DisposableStore } from '#/_base/di/lifecycle';
@@ -33,7 +36,8 @@ import { ConfigRegistry } from '#/app/config/configService';
 import { type DomainEvent, IEventService } from '#/app/event/event';
 import { ILogService } from '#/_base/log/log';
 import { IHostRequestHeaders } from '#/kosong/model/hostRequestHeaders';
-import { MODELS_SECTION, type ModelRecord } from '#/kosong/model/model';
+import { IModelService, type ModelRecord } from '#/kosong/model/model';
+import { MODELS_SECTION } from '#/app/kosongConfig/configSection';
 import { IProviderService, type ProviderConfig, type ProvidersChangedEvent } from '#/kosong/provider/provider';
 
 // Side-effect registration: the OAuth-catalog verdict
@@ -162,7 +166,7 @@ describe('OAuthService', () => {
           get: ((name: string) => providers[name]) as IProviderService['get'],
           list: (() => providers) as IProviderService['list'],
           set: providerSet as unknown as IProviderService['set'],
-          onDidChangeProviders: providerChangedEmitter.event,
+          onDidChangeProviders: providerChangedEmitter.event as IProviderService['onDidChangeProviders'],
         });
         reg.definePartialInstance(IConfigService, {
           get: ((domain: string) => configBacking()[domain]) as IConfigService['get'],
@@ -273,6 +277,117 @@ describe('OAuthService', () => {
         oauth: EXAMPLE_COM_SCOPED_REF,
       }),
     );
+  });
+
+  it('provisions OpenAI Codex with its default OAuth ref and explicit model list', async () => {
+    toolkit.login.mockImplementation((provider, options) => {
+      options.onDeviceCode(deviceAuth);
+      return Promise.resolve({ providerName: provider, ok: true });
+    });
+    const svc = createService();
+
+    await svc.startLogin(OPENAI_CODEX_PROVIDER_NAME);
+    await vi.waitFor(() => {
+      expect(svc.getFlow(OPENAI_CODEX_PROVIDER_NAME)?.status).toBe('authenticated');
+    });
+
+    expect(toolkit.login).toHaveBeenCalledWith(
+      OPENAI_CODEX_PROVIDER_NAME,
+      expect.objectContaining({
+        oauthRef: { storage: 'file', key: 'oauth/openai-codex' },
+      }),
+    );
+    expect(providers[OPENAI_CODEX_PROVIDER_NAME]).toMatchObject({
+      type: 'openai_responses',
+      oauth: { storage: 'file', key: 'oauth/openai-codex' },
+    });
+    expect(models['openai-codex/gpt-5.4']).toMatchObject({
+      provider: OPENAI_CODEX_PROVIDER_NAME,
+      model: 'gpt-5.4',
+    });
+  });
+
+  it('surfaces Anthropic browser PKCE as a pending flow and provisions catalog models', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            anthropic: {
+              id: 'anthropic',
+              name: 'Anthropic',
+              api: 'https://api.anthropic.com',
+              type: 'anthropic',
+              models: {
+                'claude-sonnet': {
+                  id: 'claude-sonnet',
+                  name: 'Claude Sonnet',
+                  limit: { context: 200000 },
+                  reasoning: true,
+                  tool_call: true,
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+    toolkit.login.mockImplementation(async (provider, options) => {
+      const callback = new AbortController();
+      const authorization = options.onBrowserAuthorization({
+        url: 'https://claude.ai/oauth/authorize?state=test',
+        instructions: 'Log in',
+        placeholder: 'http://localhost:53692/callback',
+        signal: callback.signal,
+      });
+      callback.abort();
+      await authorization;
+      return { providerName: provider, ok: true };
+    });
+    const svc = createService();
+
+    const start = await svc.startLogin(ANTHROPIC_PROVIDER_NAME);
+    expect(start).toMatchObject({
+      provider: ANTHROPIC_PROVIDER_NAME,
+      status: 'pending',
+      verification_uri_complete: 'https://claude.ai/oauth/authorize?state=test',
+      user_code: 'BROWSER',
+    });
+    await vi.waitFor(() => {
+      expect(svc.getFlow(ANTHROPIC_PROVIDER_NAME)?.status).toBe('authenticated');
+    });
+    expect(providers[ANTHROPIC_PROVIDER_NAME]).toMatchObject({
+      type: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      modelSource: 'static',
+      oauth: { storage: 'file', key: 'oauth/anthropic' },
+    });
+    expect(models['anthropic/claude-sonnet']).toMatchObject({
+      provider: ANTHROPIC_PROVIDER_NAME,
+      model: 'claude-sonnet',
+      maxContextSize: 200000,
+    });
+  });
+
+  it('preserves a successful OAuth login and provider ref when catalog provisioning is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('catalog offline'))));
+    toolkit.login.mockImplementation((provider, options) => {
+      options.onDeviceCode(deviceAuth);
+      return Promise.resolve({ providerName: provider, ok: true });
+    });
+    const svc = createService();
+
+    await svc.startLogin(XAI_PROVIDER_NAME);
+    await vi.waitFor(() => {
+      expect(svc.getFlow(XAI_PROVIDER_NAME)?.status).toBe('authenticated');
+    });
+    expect(providers[XAI_PROVIDER_NAME]).toMatchObject({
+      type: 'openai',
+      baseUrl: 'https://api.x.ai/v1',
+      oauth: { storage: 'file', key: 'oauth/xai' },
+    });
+    expect(Object.values(models).some((model) => model.provider === XAI_PROVIDER_NAME)).toBe(false);
   });
 
   it('startLogin resolves an env-scoped oauth ref for the managed provider without oauth config', async () => {
@@ -571,12 +686,10 @@ describe('OAuthService', () => {
     const result = await svc.logout(OAUTH_PROVIDER);
     expect(result).toEqual({ logged_out: true, provider: OAUTH_PROVIDER });
     expect(toolkit.logout).toHaveBeenCalledWith(OAUTH_PROVIDER, EXAMPLE_COM_SCOPED_REF);
-    expect(configReplace).toHaveBeenCalledWith('providers', {
-      [NON_OAUTH_PROVIDER]: { type: 'openai', apiKey: 'sk-test' },
-    });
+    expect(configReplace).not.toHaveBeenCalled();
   });
 
-  it('logout removes managed provider models and dangling defaults', async () => {
+  it('logout preserves managed provider, models, defaults, thinking, and services', async () => {
     models = {
       'kimi-code/kimi-k2': {
         provider: OAUTH_PROVIDER,
@@ -591,26 +704,6 @@ describe('OAuthService', () => {
     };
     defaultModel = 'kimi-code/kimi-k2';
     thinking = { enabled: true };
-    const svc = createService();
-
-    const result = await svc.logout(OAUTH_PROVIDER);
-
-    expect(result).toEqual({ logged_out: true, provider: OAUTH_PROVIDER });
-    expect(configReplace).toHaveBeenCalledWith('providers', {
-      [NON_OAUTH_PROVIDER]: { type: 'openai', apiKey: 'sk-test' },
-    });
-    expect(configReplace).toHaveBeenCalledWith('models', {
-      'custom-default': {
-        provider: NON_OAUTH_PROVIDER,
-        model: 'gpt-4o',
-        maxContextSize: 8192,
-      },
-    });
-    expect(configReplace).toHaveBeenCalledWith('defaultModel', undefined);
-    expect(configReplace).toHaveBeenCalledWith('thinking', undefined);
-  });
-
-  it('logout removes managed web services while preserving unrelated services', async () => {
     services = ServicesConfigSchema.parse({
       moonshotSearch: {
         baseUrl: 'https://api.example.com/search',
@@ -632,21 +725,16 @@ describe('OAuthService', () => {
       logged_out: true,
       provider: OAUTH_PROVIDER,
     });
-
-    expect(configReplace).toHaveBeenCalledWith('services', {
-      customService: {
-        baseUrl: 'https://service.example.com',
-      },
-    });
+    expect(configReplace).not.toHaveBeenCalled();
   });
 
-  it('logout surfaces managed provider cleanup write failures', async () => {
-    const failure = new Error('config write failed');
-    configReplace.mockRejectedValueOnce(failure);
+  it('logout surfaces credential-storage failures', async () => {
+    toolkit.logout.mockRejectedValueOnce(new Error('credential write failed'));
     const svc = createService();
 
-    await expect(svc.logout(OAUTH_PROVIDER)).rejects.toThrow('config write failed');
+    await expect(svc.logout(OAUTH_PROVIDER)).rejects.toThrow('credential write failed');
     expect(toolkit.logout).toHaveBeenCalledWith(OAUTH_PROVIDER, EXAMPLE_COM_SCOPED_REF);
+    expect(configReplace).not.toHaveBeenCalled();
   });
 
   it('status reports loggedIn based on the cached access token', async () => {
@@ -1141,6 +1229,11 @@ describe('AuthSummaryService', () => {
           get: ((name: string) => providers[name]) as IProviderService['get'],
           list: (() => providers) as IProviderService['list'],
         });
+        reg.definePartialInstance(IModelService, {
+          get: ((id: string) => models[id]) as IModelService['get'],
+          list: (() => models) as IModelService['list'],
+          getDefaultModel: (() => defaultModel) as IModelService['getDefaultModel'],
+        });
         reg.definePartialInstance(IConfigService, {
           get: ((domain: string) => {
             if (domain === MODELS_SECTION) return models;
@@ -1277,6 +1370,10 @@ describe('AuthLegacyService', () => {
       additionalServices: (reg) => {
         reg.definePartialInstance(IProviderService, {
           list: (() => providers) as IProviderService['list'],
+        });
+        reg.definePartialInstance(IModelService, {
+          ready: Promise.resolve(),
+          getDefaultModel: (() => defaultModel) as IModelService['getDefaultModel'],
         });
         reg.definePartialInstance(IConfigService, {
           ready: Promise.resolve(),
