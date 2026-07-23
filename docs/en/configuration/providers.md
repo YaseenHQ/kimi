@@ -26,7 +26,9 @@ Run `/login` to connect a provider through one of two authentication routes:
 - **Sign in with an account (OAuth)**: Kimi Code, xAI, OpenAI Codex (ChatGPT Plus or Pro), Anthropic (Claude Pro or Max), and GitHub Copilot.
 - **Connect with an API key**: choose a Kimi Platform region, a known provider from the [models.dev](https://models.dev/) catalog, or a custom `api.json` registry.
 
-OAuth tokens are stored separately from `config.toml`; provider references and model metadata remain in Kimi's normal configuration format. `/logout` lists every connected provider individually and can also clear **All OAuth accounts**, **All API-key providers**, or **All credentials**. Each bundle shows exactly which providers it includes. Credential logout preserves provider/model configuration and saved sessions. An active OAuth session remains open; an active API-key session is closed so it cannot retain the cleared key in memory.
+OAuth tokens are stored separately from `config.toml`; provider references and model metadata remain in Kimi's normal configuration format. `/logout` lists each credential individually, marking account sessions with **(OAuth)** and static credentials with **(API key)**, and can also clear **All OAuth accounts**, **All API-key providers**, or **All credentials**. This keeps OAuth and API-key credentials distinct even when they share a provider ID. Each bundle shows exactly which credentials it includes. Credential logout preserves provider/model configuration and saved sessions. An active OAuth session remains open; an active API-key session is closed so it cannot retain the cleared key in memory.
+
+Signing into an OAuth account selects account authentication for that provider and clears an API key stored on the same provider entry. The separate logout choices still handle manually combined or stale credentials safely.
 
 For complete deletion, choose **Remove saved provider configuration…** in `/logout`. This separately confirms removal of the selected provider, its models, associated credentials, and managed services. Providers written manually in `config.toml` appear here automatically; `config.toml` is storage, not a login method.
 
@@ -160,12 +162,17 @@ For example, xAI is persisted in the same `config.toml` architecture as every ot
 
 ```toml
 [providers.xai]
-type = "openai_responses"
+type = "openai"
 base_url = "https://api.x.ai/v1"
 oauth = { storage = "file", key = "oauth/xai" }
+
+[models."xai/grok-4.5"]
+provider = "xai"
+model = "grok-4.5"
+wire = "openai_responses"
 ```
 
-The token itself is not written to `config.toml`.
+The provider default uses Chat Completions; models such as Grok 4.5 that require the Responses API carry a per-model `wire` override. The token itself is not written to `config.toml`.
 
 OpenAI Codex uses a small explicit model list adapted from Pi rather than models.dev, because Pi does not fetch these subscription-backed models from models.dev either. Updating the Pi reference does not update Kimi automatically; the list must be reviewed when Pi changes it.
 

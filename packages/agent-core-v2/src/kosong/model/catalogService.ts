@@ -515,7 +515,8 @@ export class ModelCatalog extends Disposable implements IModelCatalog {
   }
 
   /**
-   * The wire protocol: the Model's explicit `protocol` wins; otherwise the
+   * The wire protocol: the legacy config's per-model `wire` override wins,
+   * followed by the v2 `protocol`; otherwise the
    * referenced provider's vendor identity resolves it — directly when the
    * vendor type IS one of the four protocols, or through the vendor's first
    * registration's `baseProtocol` (e.g. `kimi` → `openai`).
@@ -526,6 +527,10 @@ export class ModelCatalog extends Disposable implements IModelCatalog {
     provider: ProviderConfig | undefined,
     trace: ResolutionTraceCollector,
   ): Protocol {
+    if (model.wire !== undefined) {
+      trace.record('resolved.protocol', { kind: 'config', detail: 'model.wire' });
+      return model.wire;
+    }
     if (model.protocol !== undefined) {
       trace.record('resolved.protocol', { kind: 'config', detail: 'model.protocol' });
       return model.protocol;
@@ -566,10 +571,9 @@ export class ModelCatalog extends Disposable implements IModelCatalog {
       return {
         canRefresh: true,
         async getAuth(options): Promise<ProviderRequestAuth | undefined> {
-          const apiKey = await tokens.getAccessToken(providerKey, oauthRef, {
+          return tokens.getRequestAuth(providerKey, oauthRef, {
             force: options?.force === true,
           });
-          return { apiKey };
         },
       };
     }

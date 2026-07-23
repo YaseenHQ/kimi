@@ -12,14 +12,12 @@ import {
   applyOpenAICodexConfig,
   ANTHROPIC_OAUTH_KEY,
   ANTHROPIC_PROVIDER_NAME,
-  anthropicOAuthRequestHeaders,
   GITHUB_COPILOT_OAUTH_KEY,
   GITHUB_COPILOT_PROVIDER_NAME,
   enableGitHubCopilotModelsForIds,
   fetchGitHubCopilotModelIds,
   githubCopilotApiBaseUrl,
   normalizeGitHubDomain,
-  githubCopilotRequestHeaders,
   KIMI_CODE_PROVIDER_NAME,
   KimiOAuthToolkit,
   OPENAI_CODEX_OAUTH_KEY,
@@ -40,7 +38,6 @@ import {
   type KimiOAuthLoginOptions,
   type ManagedKimiConfigShape,
   type OAuthRefreshOutcome,
-  openAICodexRequestHeaders,
 } from '@moonshot-ai/kimi-code-oauth';
 
 import { mapOAuthTokenError } from '#/oauth-error';
@@ -324,22 +321,13 @@ export class KimiAuthFacade {
     return {
       getAccessToken,
       getRequestAuth: async (options) => {
-        const apiKey = await getAccessToken(options);
-        if (providerName === OPENAI_CODEX_PROVIDER_NAME) {
-          return { apiKey, headers: openAICodexRequestHeaders(apiKey) };
+        try {
+          return provider.getRequestAuth !== undefined
+            ? await provider.getRequestAuth(options)
+            : { apiKey: await provider.getAccessToken(options) };
+        } catch (error) {
+          throw mapOAuthTokenError(error, providerName) ?? error;
         }
-        if (providerName === ANTHROPIC_PROVIDER_NAME) {
-          return { apiKey, headers: anthropicOAuthRequestHeaders(apiKey) };
-        }
-        if (providerName === GITHUB_COPILOT_PROVIDER_NAME) {
-          const enterpriseDomain = normalizeGitHubDomain(runtimeRef?.oauthHost) ?? undefined;
-          return {
-            apiKey,
-            headers: githubCopilotRequestHeaders(apiKey),
-            baseUrl: githubCopilotApiBaseUrl(apiKey, enterpriseDomain),
-          };
-        }
-        return { apiKey };
       },
     };
   };

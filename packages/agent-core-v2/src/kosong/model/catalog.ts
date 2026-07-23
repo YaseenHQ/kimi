@@ -227,7 +227,7 @@ export function modelIdsForProvider(
   providerId: string,
 ): string[] {
   return Object.entries(models)
-    .filter(([, record]) => record.provider === providerId)
+    .filter(([, record]) => (record.providerId ?? record.provider) === providerId)
     .map(([modelId]) => modelId);
 }
 
@@ -238,7 +238,7 @@ export function globalDefaultForProvider(
 ): string | undefined {
   if (globalDefaultModel === undefined) return undefined;
   const record = models[globalDefaultModel];
-  return record?.provider === providerId ? globalDefaultModel : undefined;
+  return (record?.providerId ?? record?.provider) === providerId ? globalDefaultModel : undefined;
 }
 
 export interface IModelCatalog {

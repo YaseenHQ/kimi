@@ -12,6 +12,7 @@ import { Error2 } from '#/_base/errors/errors';
 
 import { IOAuthService } from '#/app/auth/auth';
 import { AuthErrors } from '#/app/auth/errors';
+import type { ProviderRequestAuth } from '#/kosong/contract/provider';
 import { nonEmpty } from '#/kosong/model/modelAuth';
 import { IModelOAuthTokens } from '#/kosong/model/modelOAuth';
 import type { OAuthRef } from '#/kosong/provider/provider';
@@ -30,18 +31,20 @@ export class ModelOAuthTokenAdapter implements IModelOAuthTokens {
     }
   }
 
-  async getAccessToken(
+  async getRequestAuth(
     provider: string,
     oauthRef: OAuthRef,
     options?: { readonly force?: boolean },
-  ): Promise<string> {
+  ): Promise<ProviderRequestAuth> {
     const tokenProvider = this.oauth.resolveTokenProvider(provider, oauthRef);
     if (tokenProvider === undefined) throw loginRequired(provider);
-    const token = await tokenProvider.getAccessToken(
-      options?.force === true ? { force: true } : undefined,
-    );
-    if (token.trim().length === 0) throw loginRequired(provider);
-    return token;
+    const refreshOptions = options?.force === true ? { force: true } : undefined;
+    const auth =
+      tokenProvider.getRequestAuth !== undefined
+        ? await tokenProvider.getRequestAuth(refreshOptions)
+        : { apiKey: await tokenProvider.getAccessToken(refreshOptions) };
+    if (nonEmpty(auth.apiKey) === undefined) throw loginRequired(provider);
+    return auth;
   }
 }
 

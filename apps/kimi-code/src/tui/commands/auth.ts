@@ -25,14 +25,25 @@ export async function handleLogoutCommand(host: SlashCommandHost): Promise<void>
     const hasToken = status.providers.some(
       (entry) => entry.providerName === provider.id && entry.hasToken,
     );
-    if (hasToken) oauthTargets.push({ id: provider.id, label: provider.label, kind: 'oauth' });
+    if (hasToken) {
+      oauthTargets.push({
+        id: provider.id,
+        value: `oauth:${provider.id}`,
+        label: `${provider.label} (OAuth)`,
+        kind: 'oauth',
+      });
+    }
   }
   const apiKeyTargets: CredentialTarget[] = [];
   for (const id of Object.keys(config.providers).toSorted()) {
-    if (oauthIds.has(id)) continue;
     const provider = config.providers[id];
     if (provider === undefined || !hasConfiguredApiKey(provider)) continue;
-    apiKeyTargets.push({ id, label: id, kind: 'api-key' });
+    apiKeyTargets.push({
+      id,
+      value: `api-key:${id}`,
+      label: `${id} (API key)`,
+      kind: 'api-key',
+    });
   }
 
   const targets = [...oauthTargets, ...apiKeyTargets];
@@ -86,6 +97,7 @@ const REMOVE_CONFIGURATION = '__remove_provider_configuration__';
 
 interface CredentialTarget {
   readonly id: string;
+  readonly value: string;
   readonly label: string;
   readonly kind: 'oauth' | 'api-key';
 }
@@ -102,7 +114,7 @@ function credentialLogoutOptions(
   apiKeyTargets: readonly CredentialTarget[],
 ): ChoiceOption[] {
   const options: ChoiceOption[] = [...oauthTargets, ...apiKeyTargets].map((target) => ({
-    value: target.id,
+    value: target.value,
     label: target.label,
     description: target.kind === 'oauth' ? 'OAuth account' : 'API key',
   }));
@@ -140,7 +152,7 @@ function resolveCredentialTargets(
   if (value === ALL_OAUTH) return oauthTargets;
   if (value === ALL_API_KEYS) return apiKeyTargets;
   if (value === ALL_CREDENTIALS) return allTargets;
-  const target = allTargets.find((entry) => entry.id === value);
+  const target = allTargets.find((entry) => entry.value === value);
   return target === undefined ? [] : [target];
 }
 

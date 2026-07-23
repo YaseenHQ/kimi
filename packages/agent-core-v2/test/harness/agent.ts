@@ -1070,10 +1070,10 @@ export class AgentTestContext {
             {
               _serviceBrand: undefined,
               hasCachedAccessToken: () => Promise.resolve(false),
-              getAccessToken: () =>
+              getRequestAuth: () =>
                 Promise.reject(
                   new Error(
-                    'IModelOAuthTokens.getAccessToken is not supported in the test harness',
+                    'IModelOAuthTokens.getRequestAuth is not supported in the test harness',
                   ),
                 ),
             } satisfies IModelOAuthTokens,

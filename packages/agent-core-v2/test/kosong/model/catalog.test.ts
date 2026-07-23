@@ -152,6 +152,27 @@ describe('Model assembly (pure data)', () => {
     }
   });
 
+  it('honors the v1 per-model wire override before the provider default', () => {
+    const { host, catalog } = createHost({
+      providers: {
+        xai: { type: 'openai', apiKey: 'token', baseUrl: 'https://api.x.ai/v1' },
+      },
+      models: {
+        grok: {
+          provider: 'xai',
+          model: 'grok-4.5',
+          wire: 'openai_responses',
+          maxContextSize: 256000,
+        },
+      },
+    });
+    try {
+      expect(catalog.get('grok').protocol).toBe('openai_responses');
+    } finally {
+      host.dispose();
+    }
+  });
+
   it('the Model carries no morphs and no request driver — pure data only', () => {
     const { host, catalog } = createHost(kimiSections);
     try {
@@ -923,7 +944,7 @@ describe('wire projection (pure)', () => {
       b: { provider: 'p2', model: 'm-b' },
       c: { providerId: 'p1', model: 'm-c' },
     };
-    expect(modelIdsForProvider(models, 'p1')).toEqual(['a']);
+    expect(modelIdsForProvider(models, 'p1')).toEqual(['a', 'c']);
     expect(globalDefaultForProvider(models, 'a', 'p1')).toBe('a');
     expect(globalDefaultForProvider(models, 'a', 'p2')).toBeUndefined();
     expect(globalDefaultForProvider(models, undefined, 'p1')).toBeUndefined();

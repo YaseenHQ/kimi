@@ -1419,7 +1419,7 @@ describe('KimiTUI startup', () => {
     await expect(driver.init()).resolves.toBe(false);
     harness.track.mockClear();
 
-    vi.mocked(promptLogoutProviderSelection).mockResolvedValue('managed:kimi-code');
+    vi.mocked(promptLogoutProviderSelection).mockResolvedValue('oauth:managed:kimi-code');
     await handleLogoutCommand(driver as any);
 
     expect(harness.auth.logout).toHaveBeenCalledWith('managed:kimi-code', {
@@ -1471,7 +1471,7 @@ describe('KimiTUI startup', () => {
     await expect(driver.init()).resolves.toBe(false);
     harness.track.mockClear();
 
-    vi.mocked(promptLogoutProviderSelection).mockResolvedValue('xai');
+    vi.mocked(promptLogoutProviderSelection).mockResolvedValue('oauth:xai');
     await handleLogoutCommand(driver as any);
 
     expect(removeProvider).not.toHaveBeenCalled();

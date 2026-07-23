@@ -7,17 +7,12 @@ import {
   applyOpenAICodexConfig,
   ANTHROPIC_OAUTH_KEY,
   ANTHROPIC_PROVIDER_NAME,
-  anthropicOAuthRequestHeaders,
   GITHUB_COPILOT_OAUTH_KEY,
   GITHUB_COPILOT_PROVIDER_NAME,
-  githubCopilotApiBaseUrl,
-  githubCopilotRequestHeaders,
-  normalizeGitHubDomain,
   KIMI_CODE_PROVIDER_NAME,
   KimiOAuthToolkit,
   OPENAI_CODEX_OAUTH_KEY,
   OPENAI_CODEX_PROVIDER_NAME,
-  openAICodexRequestHeaders,
   resolveKimiCodeLoginAuth,
   resolveKimiCodeRuntimeAuth,
   XAI_OAUTH_KEY,
@@ -165,22 +160,9 @@ class ServicesManagedAuthFacade implements ServicesAuthFacade {
     return {
       getAccessToken: (options) => provider.getAccessToken(options),
       getRequestAuth: async (options) => {
-        const apiKey = await provider.getAccessToken(options);
-        if (providerName === OPENAI_CODEX_PROVIDER_NAME) {
-          return { apiKey, headers: openAICodexRequestHeaders(apiKey) };
-        }
-        if (providerName === ANTHROPIC_PROVIDER_NAME) {
-          return { apiKey, headers: anthropicOAuthRequestHeaders(apiKey) };
-        }
-        if (providerName === GITHUB_COPILOT_PROVIDER_NAME) {
-          const enterpriseDomain = normalizeGitHubDomain(runtimeRef?.oauthHost) ?? undefined;
-          return {
-            apiKey,
-            headers: githubCopilotRequestHeaders(apiKey),
-            baseUrl: githubCopilotApiBaseUrl(apiKey, enterpriseDomain),
-          };
-        }
-        return { apiKey };
+        return provider.getRequestAuth !== undefined
+          ? provider.getRequestAuth(options)
+          : { apiKey: await provider.getAccessToken(options) };
       },
     };
   };

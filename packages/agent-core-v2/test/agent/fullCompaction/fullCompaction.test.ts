@@ -2953,8 +2953,11 @@ function oauthTestAgentOptions(
       reg.defineInstance(IModelOAuthTokens, {
         _serviceBrand: undefined,
         hasCachedAccessToken: () => Promise.resolve(true),
-        getAccessToken: (_provider, _oauthRef, options) =>
-          getAccessToken(options?.force === true ? { force: true } : undefined),
+        getRequestAuth: async (_provider, _oauthRef, options) => ({
+          apiKey: await getAccessToken(
+            options?.force === true ? { force: true } : undefined,
+          ),
+        }),
       } satisfies IModelOAuthTokens);
     }),
   };

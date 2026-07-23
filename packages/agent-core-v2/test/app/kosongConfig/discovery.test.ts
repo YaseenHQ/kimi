@@ -112,7 +112,7 @@ const staticProviders: Record<string, ProviderConfig> = {
 };
 
 const staticModels: Record<string, ModelRecord> = {
-  s1: { provider: 'static-p', model: 'static-model', maxContextSize: 1000 },
+  s1: { providerId: 'static-p', name: 'static-model', maxContextSize: 1000 },
 };
 
 const staticSections: Record<string, unknown> = {
@@ -197,7 +197,11 @@ describe('refreshProviderModels modelSource short-circuit', () => {
       expect(Object.keys(providerRecords).toSorted()).toEqual(['acme', 'static-p']);
       expect(providerRecords['static-p']).toEqual({ type: 'openai', modelSource: 'static', apiKey: 'sk-static' });
       const modelRecords = models.list();
-      expect(modelRecords['s1']).toEqual({ provider: 'static-p', model: 'static-model', maxContextSize: 1000 });
+      expect(modelRecords['s1']).toEqual({
+        providerId: 'static-p',
+        name: 'static-model',
+        maxContextSize: 1000,
+      });
       expect(modelRecords['acme/m1']).toBeDefined();
       expect(config.get<string>('defaultModel')).toBe('s1');
       expect(config.get('thinking')).toEqual({ enabled: true });

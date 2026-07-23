@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyManagedKimiCodeConfig,
   ANTHROPIC_PROVIDER_NAME,
+  GITHUB_COPILOT_PROVIDER_NAME,
   KIMI_CODE_PROVIDER_NAME,
   KimiOAuthToolkit,
   OPENAI_CODEX_OAUTH_FLOW_CONFIG,
@@ -169,6 +170,54 @@ describe('KimiOAuthToolkit', () => {
       providers: [{ providerName: KIMI_CODE_PROVIDER_NAME, hasToken: true }],
     });
     await expect(toolkit.tokenProvider().getAccessToken()).resolves.toBe('access-1');
+  });
+
+  it('derives provider-specific request auth from each fresh OAuth token', async () => {
+    const storage = new MemoryTokenStorage();
+    const codexAccess = `header.${Buffer.from(
+      JSON.stringify({
+        'https://api.openai.com/auth': { chatgpt_account_id: 'account-1' },
+      }),
+    ).toString('base64url')}.signature`;
+    storage.tokens.set('openai-codex', token(codexAccess));
+    storage.tokens.set('anthropic', token('anthropic-access'));
+    storage.tokens.set(
+      'github-copilot',
+      token('copilot-access;proxy-ep=proxy.enterprise.example;other=value'),
+    );
+    const toolkit = new KimiOAuthToolkit({ storage, now: () => 100 });
+
+    await expect(
+      toolkit
+        .tokenProvider('openai-codex', { key: 'oauth/openai-codex' })
+        .getRequestAuth?.(),
+    ).resolves.toMatchObject({
+      apiKey: codexAccess,
+      headers: { 'chatgpt-account-id': 'account-1', originator: 'kimi-code' },
+    });
+    await expect(
+      toolkit
+        .tokenProvider(ANTHROPIC_PROVIDER_NAME, { key: 'oauth/anthropic' })
+        .getRequestAuth?.(),
+    ).resolves.toMatchObject({
+      apiKey: 'anthropic-access',
+      headers: {
+        authorization: 'Bearer anthropic-access',
+        'anthropic-beta': expect.stringContaining('oauth-2025-04-20'),
+      },
+    });
+    await expect(
+      toolkit
+        .tokenProvider(GITHUB_COPILOT_PROVIDER_NAME, {
+          key: 'oauth/github-copilot',
+          oauthHost: 'https://github.enterprise.example',
+        })
+        .getRequestAuth?.(),
+    ).resolves.toMatchObject({
+      apiKey: 'copilot-access;proxy-ep=proxy.enterprise.example;other=value',
+      baseUrl: 'https://api.enterprise.example',
+      headers: { Authorization: expect.stringContaining('Bearer ') },
+    });
   });
 
   it('runs xAI through Kimi token storage and OAuthManager lifecycle', async () => {

@@ -168,7 +168,8 @@ export class ProviderDiscoveryService implements IProviderDiscoveryService {
       this.config.inspect<Record<string, ModelRecord>>(MODELS_SECTION).userValue ?? {};
     const excludedModels: Record<string, ModelRecord> = {};
     for (const [modelId, record] of Object.entries(models)) {
-      if (record.provider !== undefined && record.provider in excludedProviders) {
+      const providerId = record.providerId ?? record.provider;
+      if (providerId !== undefined && providerId in excludedProviders) {
         excludedModels[modelId] = record;
       }
     }
@@ -237,7 +238,9 @@ export class ProviderDiscoveryService implements IProviderDiscoveryService {
     );
     const models = (current.models ?? {}) as Record<string, ModelRecord>;
     const restModels = Object.fromEntries(
-      Object.entries(models).filter(([, record]) => record.provider !== providerId),
+      Object.entries(models).filter(
+        ([, record]) => (record.providerId ?? record.provider) !== providerId,
+      ),
     );
     await this.providerService.replaceAll({
       ...this.syntheticProviders(providers),

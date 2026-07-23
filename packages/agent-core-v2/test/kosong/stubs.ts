@@ -128,7 +128,7 @@ export function stubOAuthService(tokenProvider?: StubTokenProvider): IOAuthServi
 /**
  * The kosong-side OAuth port stub (`IModelOAuthTokens`), mirroring what the
  * real `app/kosongConfig` adapter does over `IOAuthService`: a programmable
- * token provider for `getAccessToken` and a probeable cached-token flag.
+ * token provider for request auth and a probeable cached-token flag.
  */
 export function stubModelOAuthTokens(
   tokenProvider?: StubTokenProvider,
@@ -137,11 +137,13 @@ export function stubModelOAuthTokens(
   return {
     _serviceBrand: undefined,
     hasCachedAccessToken: () => Promise.resolve(cachedToken !== undefined),
-    getAccessToken: (_provider, _oauthRef, options) =>
-      tokenProvider === undefined
-        ? Promise.reject(new Error('auth.login_required'))
-        : tokenProvider.getAccessToken(
-            options?.force === true ? { force: true } : undefined,
-          ),
+    getRequestAuth: async (_provider, _oauthRef, options) => ({
+      apiKey:
+        tokenProvider === undefined
+          ? await Promise.reject(new Error('auth.login_required'))
+          : await tokenProvider.getAccessToken(
+              options?.force === true ? { force: true } : undefined,
+            ),
+    }),
   };
 }

@@ -15,20 +15,38 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  ANTHROPIC_API_BASE_URL,
+  ANTHROPIC_OAUTH_KEY,
+  ANTHROPIC_PROVIDER_NAME,
+  applyCustomRegistryProvider,
   DeviceCodeTimeoutError,
+  enableGitHubCopilotModelsForIds,
+  fetchCustomRegistry,
+  fetchGitHubCopilotModelIds,
+  GITHUB_COPILOT_OAUTH_KEY,
+  GITHUB_COPILOT_PROVIDER_NAME,
+  githubCopilotApiBaseUrl,
+  normalizeGitHubDomain,
   KIMI_CODE_PLATFORM_ID,
   KIMI_CODE_PROVIDER_NAME,
   KimiOAuthToolkit,
   kimiCodeBaseUrl,
+  OPENAI_CODEX_OAUTH_KEY,
+  OPENAI_CODEX_PROVIDER_NAME,
   OAuthError,
+  applyOpenAICodexConfig,
   applyManagedKimiCodeConfig,
-  clearManagedKimiCodeConfig,
   fetchManagedKimiCodeModels,
   resolveKimiCodeLoginAuth,
   resolveKimiCodeOAuthRef,
   resolveKimiCodeRuntimeAuth,
+  XAI_API_BASE_URL,
+  XAI_OAUTH_KEY,
+  XAI_PROVIDER_NAME,
+  xaiWireTypeForModel,
   type AuthManagedUsageResult,
   type BearerTokenProvider,
+  type BrowserAuthorization,
   type DeviceAuthorization,
   type ManagedKimiConfigShape,
 } from '@moonshot-ai/kimi-code-oauth';
@@ -83,6 +101,7 @@ import {
 
 const TERMINAL_RETENTION_MS = 5 * 60 * 1000;
 const DEFAULT_DEVICE_EXPIRES_IN_SEC = 15 * 60;
+const DEFAULT_CATALOG_URL = 'https://models.dev/api.json';
 const SERVICES_SECTION = 'services';
 
 interface FlowState {
@@ -166,6 +185,8 @@ export class OAuthService extends Disposable implements IOAuthService {
         }
         resolveDevice(auth);
       },
+      onBrowserAuthorization: (authorization) =>
+        this.handleBrowserAuthorization(state, authorization, resolveDevice),
     });
     const fastPath: Promise<OAuthFlowStart | undefined> = loginPromise.then(async () => {
       if (state.device !== undefined) return undefined;
@@ -237,7 +258,6 @@ export class OAuthService extends Disposable implements IOAuthService {
         : this.readOAuthRefOptional(provider);
     const result = await this.toolkit.logout(provider, oauthRef);
     this.abortExisting(provider);
-    await this.deprovisionProvider(provider);
     return { logged_out: true, provider: result.providerName };
   }
 
@@ -400,7 +420,12 @@ export class OAuthService extends Disposable implements IOAuthService {
   } {
     const config = this.providerService.get(provider);
     if (provider !== KIMI_CODE_PROVIDER_NAME) {
-      return { oauthRef: config?.oauth, baseUrl: undefined, oauthHost: undefined };
+      const oauthRef = config?.oauth ?? defaultOAuthRef(provider);
+      return {
+        oauthRef,
+        baseUrl: undefined,
+        oauthHost: oauthRef?.oauthHost,
+      };
     }
     const loginAuth = resolveKimiCodeLoginAuth({
       configuredBaseUrl: config?.baseUrl,
@@ -486,14 +511,163 @@ export class OAuthService extends Disposable implements IOAuthService {
     oauthRef: OAuthRef | undefined,
     loginBaseUrl: string | undefined,
   ): Promise<void> {
-    if (oauthRef === undefined && provider !== KIMI_CODE_PROVIDER_NAME) return;
-    const baseUrl =
-      loginBaseUrl ?? this.providerService.get(provider)?.baseUrl ?? kimiCodeBaseUrl();
+    if (provider === KIMI_CODE_PROVIDER_NAME) {
+      const baseUrl =
+        loginBaseUrl ?? this.providerService.get(provider)?.baseUrl ?? kimiCodeBaseUrl();
+      await this.providerService.set(provider, {
+        type: 'kimi',
+        baseUrl,
+        apiKey: '',
+        oauth: oauthRef,
+      });
+      return;
+    }
+    if (oauthRef === undefined) return;
+
+    const current = this.providerService.get(provider);
     await this.providerService.set(provider, {
-      type: 'kimi',
+      ...defaultOAuthProviderConfig(provider),
+      ...current,
+      apiKey: '',
+      oauth: oauthRef,
+    });
+
+    if (provider === OPENAI_CODEX_PROVIDER_NAME) {
+      const next = structuredClone(this.readUserConfigShape());
+      applyOpenAICodexConfig(next, {
+        oauthRef,
+        preserveDefaultModel: next.defaultModel !== undefined,
+      });
+      await this.replaceProvisionedConfig(next);
+      return;
+    }
+
+    if (
+      provider !== XAI_PROVIDER_NAME &&
+      provider !== ANTHROPIC_PROVIDER_NAME &&
+      provider !== GITHUB_COPILOT_PROVIDER_NAME
+    ) {
+      return;
+    }
+
+    const source = { kind: 'apiJson' as const, url: DEFAULT_CATALOG_URL, apiKey: '' };
+    const entries = await fetchCustomRegistry(source);
+    const catalogEntry = entries[provider];
+    if (catalogEntry === undefined) {
+      throw new Error(`The models.dev catalog does not contain ${provider}.`);
+    }
+    let entry = catalogEntry;
+    let copilotAccessToken: string | undefined;
+    if (provider === GITHUB_COPILOT_PROVIDER_NAME) {
+      copilotAccessToken = await this.toolkit.getCachedAccessToken(provider, oauthRef);
+      if (copilotAccessToken !== undefined) {
+        const enterpriseDomain = normalizeGitHubDomain(oauthRef.oauthHost) ?? undefined;
+        try {
+          await enableGitHubCopilotModelsForIds(
+            copilotAccessToken,
+            Object.keys(entry.models),
+            enterpriseDomain,
+          );
+          const available = new Set(
+            await fetchGitHubCopilotModelIds(
+              copilotAccessToken,
+              undefined,
+              enterpriseDomain,
+            ),
+          );
+          const filtered = Object.fromEntries(
+            Object.entries(entry.models).filter(([id]) => available.has(id)),
+          );
+          if (Object.keys(filtered).length > 0) entry = { ...entry, models: filtered };
+        } catch {
+          // Keep the static catalog when account-scoped discovery is unavailable.
+        }
+      }
+    }
+    const next = structuredClone(this.readUserConfigShape());
+    applyCustomRegistryProvider(next, entry, source);
+    const generated = next.providers[provider] as ProviderConfig;
+    let baseUrl = generated.baseUrl;
+    if (provider === XAI_PROVIDER_NAME) baseUrl = XAI_API_BASE_URL;
+    if (provider === ANTHROPIC_PROVIDER_NAME) baseUrl = ANTHROPIC_API_BASE_URL;
+    if (provider === GITHUB_COPILOT_PROVIDER_NAME) {
+      baseUrl = githubCopilotApiBaseUrl(
+        copilotAccessToken,
+        normalizeGitHubDomain(oauthRef.oauthHost) ?? undefined,
+      );
+    }
+    next.providers[provider] = {
+      ...generated,
+      modelSource: 'static',
       baseUrl,
       apiKey: '',
       oauth: oauthRef,
+      source: undefined,
+    };
+    if (provider === XAI_PROVIDER_NAME) {
+      const models = (next.models ?? {}) as Record<string, ModelRecord>;
+      for (const model of Object.values(models)) {
+        if ((model.providerId ?? model.provider) !== provider) continue;
+        if (model.model === undefined) continue;
+        const wire = xaiWireTypeForModel(model.model);
+        model.wire = wire === 'openai_responses' ? wire : undefined;
+      }
+    }
+    if (next.defaultModel === undefined || next.models?.[next.defaultModel] === undefined) {
+      const models = (next.models ?? {}) as Record<string, ModelRecord>;
+      const first = Object.keys(models).find(
+        (alias) => (models[alias]?.providerId ?? models[alias]?.provider) === provider,
+      );
+      if (first !== undefined) {
+        next.defaultModel = first;
+        const capabilities = models[first]?.capabilities ?? [];
+        next.thinking = {
+          ...next.thinking,
+          enabled:
+            capabilities.includes('thinking') || capabilities.includes('always_thinking'),
+        };
+      }
+    }
+    await this.replaceProvisionedConfig(next);
+  }
+
+  private async replaceProvisionedConfig(next: ManagedKimiConfigShape): Promise<void> {
+    await this.config.replace(PROVIDERS_SECTION, next.providers);
+    await this.config.replace(MODELS_SECTION, next.models ?? {});
+    await this.config.replace(DEFAULT_MODEL_SECTION, next.defaultModel);
+    await this.config.replace(THINKING_SECTION, next.thinking);
+  }
+
+  private handleBrowserAuthorization(
+    state: FlowState,
+    authorization: BrowserAuthorization,
+    resolveDevice: (auth: DeviceAuthorization) => void,
+  ): Promise<string | undefined> {
+    const browserFlow: DeviceAuthorization = {
+      userCode: 'BROWSER',
+      deviceCode: state.flowId,
+      verificationUri: authorization.url,
+      verificationUriComplete: authorization.url,
+      expiresIn: DEFAULT_DEVICE_EXPIRES_IN_SEC,
+      interval: 1,
+    };
+    state.device = browserFlow;
+    resolveDevice(browserFlow);
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        authorization.signal?.removeEventListener('abort', finish);
+        state.controller.signal.removeEventListener('abort', finish);
+        resolve(undefined);
+      };
+      if (authorization.signal?.aborted === true || state.controller.signal.aborted) {
+        finish();
+        return;
+      }
+      authorization.signal?.addEventListener('abort', finish, { once: true });
+      state.controller.signal.addEventListener('abort', finish, { once: true });
     });
   }
 
@@ -504,40 +678,6 @@ export class OAuthService extends Disposable implements IOAuthService {
         provider,
         failures: result.failed,
       });
-    }
-  }
-
-  private async deprovisionProvider(provider: string): Promise<void> {
-    if (provider !== KIMI_CODE_PROVIDER_NAME) return;
-    const next = structuredClone(this.readUserConfigShape());
-    const cleanup = clearManagedKimiCodeConfig(next);
-    if (
-      !cleanup.removedProvider &&
-      cleanup.removedModels.length === 0 &&
-      !cleanup.defaultModelCleared &&
-      cleanup.removedServices.length === 0
-    ) {
-      return;
-    }
-    if (cleanup.defaultModelCleared) {
-      next.thinking = undefined;
-    }
-    if (cleanup.removedProvider) {
-      await this.config.replace(PROVIDERS_SECTION, next.providers);
-    }
-    if (cleanup.removedModels.length > 0) {
-      await this.config.replace(MODELS_SECTION, next.models ?? {});
-    }
-    if (cleanup.removedServices.length > 0) {
-      await this.config.replace(SERVICES_SECTION, next.services);
-    }
-    if (cleanup.defaultModelCleared) {
-      // Delete, not merge: `set(domain, undefined)` resolves back to the base
-      // value by design — only `replace(domain, undefined)` actually removes
-      // the key, and leaving defaultModel dangling to a just-removed managed
-      // model keeps /api/v1/auth reporting ready=true after logout.
-      await this.config.replace(DEFAULT_MODEL_SECTION, undefined);
-      await this.config.replace(THINKING_SECTION, undefined);
     }
   }
 
@@ -664,6 +804,40 @@ export class AuthSummaryService implements IAuthSummaryService {
       throw new AuthTokenMissingError(providerKey);
     }
     throw new AuthTokenMissingError(providerName);
+  }
+}
+
+function defaultOAuthRef(provider: string): OAuthRef | undefined {
+  switch (provider) {
+    case OPENAI_CODEX_PROVIDER_NAME:
+      return { storage: 'file', key: OPENAI_CODEX_OAUTH_KEY };
+    case XAI_PROVIDER_NAME:
+      return { storage: 'file', key: XAI_OAUTH_KEY };
+    case ANTHROPIC_PROVIDER_NAME:
+      return { storage: 'file', key: ANTHROPIC_OAUTH_KEY };
+    case GITHUB_COPILOT_PROVIDER_NAME:
+      return { storage: 'file', key: GITHUB_COPILOT_OAUTH_KEY };
+    default:
+      return undefined;
+  }
+}
+
+function defaultOAuthProviderConfig(provider: string): ProviderConfig {
+  switch (provider) {
+    case OPENAI_CODEX_PROVIDER_NAME:
+      return { type: 'openai_responses', modelSource: 'static' };
+    case XAI_PROVIDER_NAME:
+      return { type: 'openai', baseUrl: XAI_API_BASE_URL, modelSource: 'static' };
+    case ANTHROPIC_PROVIDER_NAME:
+      return { type: 'anthropic', baseUrl: ANTHROPIC_API_BASE_URL, modelSource: 'static' };
+    case GITHUB_COPILOT_PROVIDER_NAME:
+      return {
+        type: 'openai',
+        baseUrl: githubCopilotApiBaseUrl(),
+        modelSource: 'static',
+      };
+    default:
+      return {};
   }
 }
 

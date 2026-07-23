@@ -11,6 +11,7 @@
 
 import { createDecorator, type ServiceIdentifier } from '#/_base/di/instantiation';
 
+import type { ProviderRequestAuth } from '../contract/provider';
 import type { OAuthRef } from '../provider/provider';
 
 export interface IModelOAuthTokens {
@@ -22,11 +23,11 @@ export interface IModelOAuthTokens {
    * Returns a usable access token, refreshing when needed. Throws
    * `auth.login_required` when the provider is not logged in.
    */
-  getAccessToken(
+  getRequestAuth(
     provider: string,
     oauthRef: OAuthRef,
     options?: { readonly force?: boolean },
-  ): Promise<string>;
+  ): Promise<ProviderRequestAuth>;
 }
 
 export const IModelOAuthTokens: ServiceIdentifier<IModelOAuthTokens> =

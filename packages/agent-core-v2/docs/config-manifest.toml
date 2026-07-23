@@ -213,6 +213,7 @@ merge_all_available_skills = true
     # key: string
     # oauth_host: string
   # protocol: "anthropic" | "openai" | "openai_responses" | "google-genai"
+  # wire: "openai" | "openai_responses"
   # name: string
   # aliases: string[]
   # provider: string

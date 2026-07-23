@@ -86,7 +86,7 @@ function makeHost() {
     track: vi.fn(),
     showStatus: vi.fn(),
   } as unknown as SlashCommandHost;
-  return { host, harness, updated };
+  return { host, harness, config, updated };
 }
 
 describe('/logout', () => {
@@ -100,7 +100,7 @@ describe('/logout', () => {
 
   it('removes only the OAuth credential and preserves the active session config', async () => {
     const { host, harness } = makeHost();
-    promptState.selected = 'anthropic';
+    promptState.selected = 'oauth:anthropic';
 
     await handleLogoutCommand(host);
 
@@ -110,12 +110,12 @@ describe('/logout', () => {
     expect(harness.removeProvider).not.toHaveBeenCalled();
     expect(host.authFlow.refreshConfigAfterLogout).not.toHaveBeenCalled();
     expect(host.authFlow.clearActiveSessionAfterLogout).not.toHaveBeenCalled();
-    expect(host.showStatus).toHaveBeenCalledWith('Logged out from Anthropic.');
+    expect(host.showStatus).toHaveBeenCalledWith('Logged out from Anthropic (OAuth).');
   });
 
   it('clears an API key without removing its provider or a different active session', async () => {
     const { host, harness } = makeHost();
-    promptState.selected = 'qwen';
+    promptState.selected = 'api-key:qwen';
 
     await handleLogoutCommand(host);
 
@@ -132,7 +132,7 @@ describe('/logout', () => {
 
   it('clears a config.toml env-table credential without removing other env values', async () => {
     const { host, harness } = makeHost();
-    promptState.selected = 'deepseek';
+    promptState.selected = 'api-key:deepseek';
 
     await handleLogoutCommand(host);
 
@@ -149,6 +149,56 @@ describe('/logout', () => {
     expect(harness.removeProvider).not.toHaveBeenCalled();
   });
 
+  it('can clear an API key whose provider id is also a known OAuth provider', async () => {
+    const { host, harness, config } = makeHost();
+    (config.providers.anthropic as typeof config.providers.anthropic & { apiKey: string }).apiKey =
+      'anthropic-api-key';
+    harness.auth.status.mockImplementation(async (providerName: string) => ({
+      providers: [{ providerName, hasToken: false }],
+    }));
+    promptState.selected = 'api-key:anthropic';
+
+    await handleLogoutCommand(host);
+
+    expect(promptState.options).toContainEqual(
+      expect.objectContaining({
+        value: 'api-key:anthropic',
+        label: 'anthropic (API key)',
+      }),
+    );
+    expect(harness.auth.logout).not.toHaveBeenCalled();
+    expect(harness.setConfig).toHaveBeenCalledWith({
+      providers: {
+        anthropic: {
+          type: 'anthropic',
+          oauth: { storage: 'file', key: 'anthropic' },
+          apiKey: '',
+        },
+      },
+    });
+  });
+
+  it('shows OAuth and API-key credentials separately when both share a provider id', async () => {
+    const { host, config } = makeHost();
+    (config.providers.anthropic as typeof config.providers.anthropic & { apiKey: string }).apiKey =
+      'anthropic-api-key';
+
+    await handleLogoutCommand(host);
+
+    expect(promptState.options).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          value: 'oauth:anthropic',
+          label: 'Anthropic (OAuth)',
+        }),
+        expect.objectContaining({
+          value: 'api-key:anthropic',
+          label: 'anthropic (API key)',
+        }),
+      ]),
+    );
+  });
+
   it('shows and executes credential bundles with their included providers', async () => {
     const { host, harness } = makeHost();
     promptState.selected = '__logout_all_credentials__';
@@ -159,7 +209,7 @@ describe('/logout', () => {
       expect.objectContaining({
         value: '__logout_all_credentials__',
         label: 'All credentials',
-        description: 'Includes: Anthropic, deepseek, qwen',
+        description: 'Includes: Anthropic (OAuth), deepseek (API key), qwen (API key)',
       }),
     );
     expect(harness.auth.logout).toHaveBeenCalledWith('anthropic', {

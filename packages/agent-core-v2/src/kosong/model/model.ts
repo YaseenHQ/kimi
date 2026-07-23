@@ -69,6 +69,8 @@ export interface ModelRecord {
   oauth?: OAuthRef;
 
   protocol?: Protocol;
+  /** Legacy per-model OpenAI transport override used by the v1 config format. */
+  wire?: 'openai' | 'openai_responses';
 
   name?: string;
   aliases?: string[];

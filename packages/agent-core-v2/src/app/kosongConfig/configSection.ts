@@ -187,6 +187,7 @@ const ModelBaseSchema = z.object({
   oauth: OAuthRefSchema.optional(),
 
   protocol: ProtocolSchema.optional(),
+  wire: z.enum(['openai', 'openai_responses']).optional(),
 
   name: z.string().optional(),
   aliases: z.array(z.string()).optional(),
@@ -212,6 +213,7 @@ export const ModelOverrideSchema = ModelBaseSchema.omit({
   apiKey: true,
   oauth: true,
   protocol: true,
+  wire: true,
   name: true,
   aliases: true,
   provider: true,

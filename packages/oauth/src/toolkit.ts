@@ -5,12 +5,17 @@ import { KIMI_CODE_FLOW_CONFIG } from './constants';
 import { OAuthUnauthorizedError } from './errors';
 import {
   ANTHROPIC_PROVIDER_NAME,
+  anthropicOAuthRequestHeaders,
   loginAnthropic,
   refreshAnthropicAccessToken,
   type BrowserAuthorization,
 } from './anthropic';
 import {
   GITHUB_COPILOT_OAUTH_FLOW_CONFIG,
+  GITHUB_COPILOT_PROVIDER_NAME,
+  githubCopilotApiBaseUrl,
+  githubCopilotRequestHeaders,
+  normalizeGitHubDomain,
   pollGitHubCopilotDeviceToken,
   refreshGitHubCopilotAccessToken,
   requestGitHubCopilotDeviceAuthorization,
@@ -52,7 +57,9 @@ import {
 import { OAuthManager, type LoginOptions, type OAuthManagerOptions } from './oauth-manager';
 import {
   OPENAI_CODEX_OAUTH_FLOW_CONFIG,
+  OPENAI_CODEX_PROVIDER_NAME,
   loginOpenAICodexBrowser,
+  openAICodexRequestHeaders,
   pollOpenAICodexDeviceToken,
   refreshOpenAICodexAccessToken,
   requestOpenAICodexDeviceAuthorization,
@@ -70,7 +77,11 @@ export interface BearerTokenProvider {
   getAccessToken(options?: { readonly force?: boolean | undefined }): Promise<string>;
   getRequestAuth?(
     options?: { readonly force?: boolean | undefined },
-  ): Promise<{ readonly apiKey?: string; readonly headers?: Record<string, string> }>;
+  ): Promise<{
+    readonly apiKey?: string;
+    readonly headers?: Record<string, string>;
+    readonly baseUrl?: string;
+  }>;
 }
 
 export interface AuthProviderStatus {
@@ -177,7 +188,7 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     oauthRef?: KimiOAuthTokenRef | undefined,
   ): Promise<AuthStatus> {
     const name = providerName ?? KIMI_CODE_PROVIDER_NAME;
-    const oauthHost = this.oauthHostFor(oauthRef);
+    const oauthHost = this.oauthHostFor(name, oauthRef);
     const oauthKey = oauthRef?.key ?? this.defaultOAuthKey(undefined, oauthHost);
     return {
       providers: [
@@ -194,7 +205,7 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     options: KimiOAuthLoginOptions = {},
   ): Promise<KimiOAuthLoginResult> {
     const name = providerName ?? KIMI_CODE_PROVIDER_NAME;
-    const oauthHost = this.oauthHostFor(options.oauthRef, options.oauthHost);
+    const oauthHost = this.oauthHostFor(name, options.oauthRef, options.oauthHost);
     const oauthKey = options.oauthRef?.key ?? this.defaultOAuthKey(options.baseUrl, oauthHost);
     if (name === ANTHROPIC_PROVIDER_NAME) {
       if (options.onBrowserAuthorization === undefined) {
@@ -309,7 +320,7 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     acquire: () => Promise<import('./types').TokenInfo>,
     options: { readonly forceLogin?: boolean | undefined } = {},
   ): Promise<void> {
-    const oauthHost = this.oauthHostFor(oauthRef);
+    const oauthHost = this.oauthHostFor(providerName, oauthRef);
     const oauthKey = oauthRef.key ?? this.defaultOAuthKey(undefined, oauthHost);
     const manager = this.managerFor(providerName, oauthKey, oauthHost);
     if (options.forceLogin !== true && (await manager.hasToken())) {
@@ -329,7 +340,7 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     options: KimiOAuthLogoutOptions = {},
   ): Promise<KimiOAuthLogoutResult> {
     const name = providerName ?? KIMI_CODE_PROVIDER_NAME;
-    const oauthHost = this.oauthHostFor(oauthRef);
+    const oauthHost = this.oauthHostFor(name, oauthRef);
     const oauthKey = oauthRef?.key ?? this.defaultOAuthKey(undefined, oauthHost);
     await this.managerFor(name, oauthKey, oauthHost).logout();
     if (
@@ -352,7 +363,7 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     } = {},
   ): Promise<string> {
     const name = providerName ?? KIMI_CODE_PROVIDER_NAME;
-    const oauthHost = this.oauthHostFor(options.oauthRef);
+    const oauthHost = this.oauthHostFor(name, options.oauthRef);
     const oauthKey = options.oauthRef?.key ?? this.defaultOAuthKey(undefined, oauthHost);
     return this.managerFor(name, oauthKey, oauthHost).ensureFresh(options);
   }
@@ -362,7 +373,7 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     oauthRef?: KimiOAuthTokenRef,
   ): Promise<string | undefined> {
     const name = providerName ?? KIMI_CODE_PROVIDER_NAME;
-    const oauthHost = this.oauthHostFor(oauthRef);
+    const oauthHost = this.oauthHostFor(name, oauthRef);
     const oauthKey = oauthRef?.key ?? this.defaultOAuthKey(undefined, oauthHost);
     return this.managerFor(name, oauthKey, oauthHost).getCachedAccessToken();
   }
@@ -372,10 +383,34 @@ export class KimiOAuthToolkit<TConfig = unknown> {
     oauthRef?: KimiOAuthTokenRef | undefined,
   ): BearerTokenProvider {
     const name = providerName ?? KIMI_CODE_PROVIDER_NAME;
-    const oauthHost = this.oauthHostFor(oauthRef);
+    const oauthHost = this.oauthHostFor(name, oauthRef);
     const oauthKey = oauthRef?.key ?? this.defaultOAuthKey(undefined, oauthHost);
+    const getAccessToken = (options?: { readonly force?: boolean | undefined }) =>
+      this.managerFor(name, oauthKey, oauthHost).ensureFresh(options);
     return {
-      getAccessToken: (options) => this.managerFor(name, oauthKey, oauthHost).ensureFresh(options),
+      getAccessToken,
+      getRequestAuth: async (options) => {
+        const apiKey = await getAccessToken(options);
+        if (name === OPENAI_CODEX_PROVIDER_NAME) {
+          return { apiKey, headers: openAICodexRequestHeaders(apiKey) };
+        }
+        if (name === ANTHROPIC_PROVIDER_NAME) {
+          return { apiKey, headers: anthropicOAuthRequestHeaders(apiKey) };
+        }
+        if (name === GITHUB_COPILOT_PROVIDER_NAME) {
+          const domain = normalizeGitHubDomain(oauthHost) ?? undefined;
+          const enterpriseDomain =
+            domain === normalizeGitHubDomain(GITHUB_COPILOT_OAUTH_FLOW_CONFIG.oauthHost)
+              ? undefined
+              : domain;
+          return {
+            apiKey,
+            headers: githubCopilotRequestHeaders(apiKey),
+            baseUrl: githubCopilotApiBaseUrl(apiKey, enterpriseDomain),
+          };
+        }
+        return { apiKey };
+      },
     };
   }
 
@@ -570,9 +605,22 @@ export class KimiOAuthToolkit<TConfig = unknown> {
   }
 
   private oauthHostFor(
+    providerName: string,
     oauthRef?: KimiOAuthTokenRef | undefined,
     oauthHost?: string | undefined,
   ): string {
+    if (providerName === GITHUB_COPILOT_PROVIDER_NAME) {
+      return oauthRef?.oauthHost ?? oauthHost ?? GITHUB_COPILOT_OAUTH_FLOW_CONFIG.oauthHost;
+    }
+    if (providerName === OPENAI_CODEX_PROVIDER_NAME) {
+      return OPENAI_CODEX_OAUTH_FLOW_CONFIG.oauthHost;
+    }
+    if (providerName === XAI_OAUTH_FLOW_CONFIG.name) {
+      return XAI_OAUTH_FLOW_CONFIG.oauthHost;
+    }
+    if (providerName === ANTHROPIC_PROVIDER_NAME) {
+      return 'https://platform.claude.com';
+    }
     return oauthRef?.oauthHost ?? oauthHost ?? this.flowConfig.oauthHost;
   }
 
