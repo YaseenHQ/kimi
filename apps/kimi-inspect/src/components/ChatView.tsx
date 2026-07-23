@@ -495,7 +495,7 @@ export function ChatView({
               <Badge tone="amber">{state.pendingInteractions.size} pending</Badge>
             ) : null}
           </div>
-    
+
           <div className="flex-1 overflow-y-auto px-4 py-3" ref={scrollRef} onScroll={onScroll}>
             {state.hasMoreOlder ? (
               <div ref={topSentinelRef} className="mb-3 flex justify-center">
@@ -569,7 +569,7 @@ export function ChatView({
               <InteractionEntityView key={interaction.interactionId} interaction={interaction} />
             ))}
           </div>
-    
+
           <div className="border-t border-neutral-800 p-3">
             {sendError !== null ? (
               <div className="mb-2">
