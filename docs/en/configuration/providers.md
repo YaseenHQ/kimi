@@ -32,6 +32,8 @@ For complete deletion, choose **Remove saved provider configuration…** in `/lo
 
 Kimi Code currently stores one OAuth account per provider. Running `/login` for a connected provider lets you keep the current account or choose **Switch account**. A switch replaces the stored credential only after the new login succeeds, so cancelling or failing the flow leaves the current account usable.
 
+When connecting a known third-party provider, Kimi Code fetches the [models.dev](https://models.dev/) catalog, then asks you to select a provider, enter an API key, and choose a default model. Vendors whose protocol the catalog does not declare are imported as OpenAI-compatible with a "guessed" note; when the catalog provides no usable endpoint, Kimi Code asks for a base URL first. Proprietary protocols such as Amazon Bedrock and Cohere, and unrecognized explicit protocols, are refused. Deprecated and alpha-status models are excluded.
+
 For a custom registry, paste its URL and Bearer token. The CLI creates the `providers` / `models` entries. On later startup, providers from the same registry URL are refreshed together, so upstream provider additions, removals, and model metadata changes are synced.
 
 The same operations are also available in non-interactive environments via the shell command: [`kimi provider`](../reference/kimi-command.md#kimi-provider).
