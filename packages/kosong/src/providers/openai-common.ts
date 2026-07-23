@@ -62,6 +62,9 @@ export function convertContentPart(part: ContentPart): OpenAIContentPart | null 
             ? { url: part.videoUrl.url }
             : { url: part.videoUrl.url, id: part.videoUrl.id },
       };
+    case 'openai_compaction':
+      // Only the Responses API understands this opaque item.
+      return null;
     default:
       throw new Error(`Unknown content part type: ${(part as ContentPart).type}`);
   }

@@ -150,7 +150,7 @@ function toProtocolRole(role: ContextMessage['role']): MessageRole {
  * Translate kosong content parts to SCHEMAS §3 content parts. See header
  * for the full mapping table.
  */
-function mapContentPart(part: ContextMessage['content'][number]): MessageContent {
+function mapContentPart(part: ContextMessage['content'][number]): MessageContent | undefined {
   switch (part.type) {
     case 'text':
       return { type: 'text', text: part.text };
@@ -177,7 +177,16 @@ function mapContentPart(part: ContextMessage['content'][number]): MessageContent
         type: 'text',
         text: `[video:${part.videoUrl.url}]`,
       };
+    case 'openai_compaction':
+      return undefined;
   }
+}
+
+function mapContentParts(parts: ContextMessage['content']): MessageContent[] {
+  return parts.flatMap((part) => {
+    const mapped = mapContentPart(part);
+    return mapped === undefined ? [] : [mapped];
+  });
 }
 
 /**
@@ -199,7 +208,7 @@ function buildProtocolContent(msg: ContextMessage): MessageContent[] {
     if (msg.toolCallId === undefined) {
       // Defensive — kosong tool messages always carry toolCallId. If absent,
       // fall back to text passthrough so we don't lose user-visible content.
-      return msg.content.map((p) => mapContentPart(p));
+      return mapContentParts(msg.content);
     }
     const hasMediaPart = msg.content.some(
       (p) => p.type === 'image_url' || p.type === 'video_url' || p.type === 'audio_url',
@@ -222,7 +231,7 @@ function buildProtocolContent(msg: ContextMessage): MessageContent[] {
     return [part];
   }
 
-  const base = msg.content.map((p) => mapContentPart(p));
+  const base = mapContentParts(msg.content);
 
   if (msg.role === 'assistant' && msg.toolCalls.length > 0) {
     for (const call of msg.toolCalls) {

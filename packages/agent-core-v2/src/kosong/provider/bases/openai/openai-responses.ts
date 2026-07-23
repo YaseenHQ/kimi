@@ -108,6 +108,11 @@ type ResponseOutputItemView =
       summary: RawObject[];
     }
   | {
+      type: 'compaction';
+      id?: string;
+      encryptedContent: string;
+    }
+  | {
       type: 'other';
     };
 
@@ -201,6 +206,14 @@ function readResponseOutputItem(value: unknown, context: string): ResponseOutput
       type,
       encryptedContent: readStringField(item, 'encrypted_content'),
       summary: readObjectArrayField(item, 'summary') ?? [],
+    };
+  }
+
+  if (type === 'compaction') {
+    return {
+      type,
+      id: readStringField(item, 'id'),
+      encryptedContent: requireStringField(item, 'encrypted_content', context),
     };
   }
 
@@ -422,6 +435,9 @@ function contentPartsToInputItems(parts: ContentPart[]): unknown[] {
         break;
       case 'think':
         break;
+      case 'openai_compaction':
+        // Emitted as a top-level item by convertMessage.
+        break;
     }
   }
   return items;
@@ -458,6 +474,9 @@ function messageContentToFunctionOutputItems(content: ContentPart[]): unknown[] 
         items.push({ type: 'input_text', text: OMITTED_VIDEO_PLACEHOLDER });
         break;
       case 'think':
+        break;
+      case 'openai_compaction':
+        // Compaction items cannot appear inside function outputs.
         break;
     }
   }
@@ -589,6 +608,14 @@ function convertMessage(
           type: 'reasoning',
           encrypted_content: encryptedValue,
         });
+      } else if (part.type === 'openai_compaction') {
+        flushPendingParts();
+        result.push({
+          type: 'compaction',
+          encrypted_content: part.encryptedContent,
+          id: part.id,
+        });
+        i += 1;
       } else {
         pendingParts.push(part);
         i += 1;
@@ -766,6 +793,12 @@ export class OpenAIResponsesStreamedMessage implements StreamedMessage {
           }
           yield thinkPart;
         }
+      } else if (outputItem.type === 'compaction') {
+        yield {
+          type: 'openai_compaction',
+          encryptedContent: outputItem.encryptedContent,
+          id: outputItem.id,
+        };
       }
     }
   }
@@ -906,6 +939,12 @@ export class OpenAIResponsesStreamedMessage implements StreamedMessage {
                 (thinkPart as { encrypted: string }).encrypted = item.encryptedContent;
               }
               yield thinkPart;
+            } else if (item.type === 'compaction') {
+              yield {
+                type: 'openai_compaction',
+                encryptedContent: item.encryptedContent,
+                id: item.id,
+              };
             } else if (item.type === 'function_call' && typeof item.arguments === 'string') {
               const streamIndex = responseStreamIndex(item.itemId, outputIndex);
               yield* yieldFinalArgumentsSuffix(streamIndex, item.arguments, type);

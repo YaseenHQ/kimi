@@ -145,6 +145,44 @@ describe('OpenAIResponsesChatProvider', () => {
       ]);
     });
 
+    it('replays OpenAI compaction items as top-level response input items', async () => {
+      const provider = createProvider();
+      const history: Message[] = [
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'openai_compaction',
+              encryptedContent: 'encrypted-summary',
+              id: 'cmp_123',
+            },
+            { type: 'text', text: 'Continuing after compaction.' },
+          ],
+          toolCalls: [],
+        },
+      ];
+      const body = await captureRequestBody(provider, '', [], history);
+
+      expect(body['input']).toEqual([
+        {
+          type: 'compaction',
+          encrypted_content: 'encrypted-summary',
+          id: 'cmp_123',
+        },
+        {
+          content: [
+            {
+              type: 'output_text',
+              text: 'Continuing after compaction.',
+              annotations: [],
+            },
+          ],
+          role: 'assistant',
+          type: 'message',
+        },
+      ]);
+    });
+
     it('multi-turn with system prompt', async () => {
       const provider = createProvider();
       const history: Message[] = [
@@ -1316,6 +1354,36 @@ describe('OpenAIResponsesChatProvider', () => {
       ]);
     });
 
+    it('yields opaque compaction items from non-stream responses', async () => {
+      const provider = createProvider();
+      (provider as any)._stream = false;
+      ((provider as any)._client.responses as unknown as Record<string, unknown>)['create'] = vi
+        .fn()
+        .mockResolvedValue({
+          id: 'resp_compaction',
+          output: [
+            {
+              type: 'compaction',
+              id: 'cmp_123',
+              encrypted_content: 'encrypted-summary',
+            },
+          ],
+          usage: { input_tokens: 5, output_tokens: 3, total_tokens: 8 },
+        });
+
+      const stream = await provider.generate('', [], []);
+      const parts: StreamedMessagePart[] = [];
+      for await (const part of stream) parts.push(part);
+
+      expect(parts).toEqual([
+        {
+          type: 'openai_compaction',
+          encryptedContent: 'encrypted-summary',
+          id: 'cmp_123',
+        },
+      ]);
+    });
+
     it('yields an empty ThinkPart from a non-stream reasoning item with no summaries', async () => {
       const provider = createProvider();
       (provider as any)._stream = false;
@@ -1875,6 +1943,31 @@ describe('OpenAIResponsesChatProvider', () => {
       for await (const p of stream) parts.push(p);
 
       expect(parts).toEqual([{ type: 'think', think: '', encrypted: 'enc_done' }]);
+    });
+
+    it('yields opaque compaction items from response.output_item.done', async () => {
+      const events = [
+        {
+          type: 'response.output_item.done',
+          item: {
+            type: 'compaction',
+            id: 'cmp_stream',
+            encrypted_content: 'encrypted-stream-summary',
+          },
+        },
+      ];
+
+      const stream = new OpenAIResponsesStreamedMessage(makeAsyncIterable(events), true);
+      const parts: StreamedMessagePart[] = [];
+      for await (const part of stream) parts.push(part);
+
+      expect(parts).toEqual([
+        {
+          type: 'openai_compaction',
+          encryptedContent: 'encrypted-stream-summary',
+          id: 'cmp_stream',
+        },
+      ]);
     });
 
     it('yields ThinkPart from response.output_item.done reasoning item without encrypted_content', async () => {

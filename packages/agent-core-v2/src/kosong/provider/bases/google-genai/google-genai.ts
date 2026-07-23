@@ -22,7 +22,10 @@ import {
   normalizeAPIStatusError,
 } from '#/kosong/contract/errors';
 import type { Message, StreamedMessagePart, ThinkPart, ToolCall } from '#/kosong/contract/message';
-import { isToolDeclarationOnlyMessage } from '#/kosong/contract/message';
+import {
+  isOpaqueAssistantMessage,
+  isToolDeclarationOnlyMessage,
+} from '#/kosong/contract/message';
 import type {
   ChatProvider,
   FinishReason,
@@ -258,6 +261,8 @@ function messageToGoogleGenAI(message: Message): GoogleContent {
       case 'video_url':
         parts.push(convertMediaUrl(part.videoUrl.url, 'video/mp4'));
         break;
+      case 'openai_compaction':
+        break;
     }
   }
 
@@ -323,6 +328,8 @@ function toolMessageToFunctionResponseParts(
         break;
       case 'think':
         break;
+      case 'openai_compaction':
+        break;
     }
   }
 
@@ -347,6 +354,10 @@ export function messagesToGoogleGenAIContents(messages: Message[]): GoogleConten
     if (message === undefined) break;
 
     if (isToolDeclarationOnlyMessage(message)) {
+      i += 1;
+      continue;
+    }
+    if (isOpaqueAssistantMessage(message)) {
       i += 1;
       continue;
     }
