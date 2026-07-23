@@ -63,6 +63,43 @@ describe('Agent context', () => {
     expect(ctx.project().some((message) => 'origin' in message)).toBe(false);
   });
 
+  it('installs and replays a provider-owned compaction window atomically', () => {
+    context.append({
+      role: 'user',
+      content: [{ type: 'text', text: 'old request' }],
+      toolCalls: [],
+    });
+    const replacement: ContextMessage[] = [
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'old request' }],
+        toolCalls: [],
+      },
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'openai_compaction',
+            encryptedContent: 'opaque-state',
+            id: 'cmp_1',
+            source: { model: 'gpt-5.4', baseUrl: 'https://api.openai.com/v1' },
+          },
+        ],
+        toolCalls: [],
+      },
+    ];
+
+    const result = context.applyCompaction({
+      summary: '[OpenAI server compaction checkpoint]',
+      replacementMessages: replacement,
+      compactedCount: 1,
+      tokensBefore: 50,
+    });
+
+    expect(context.get()).toEqual(replacement);
+    expect(result.keptUserMessageCount).toBe(1);
+  });
+
   it('renders tool error and empty-output status as model-visible text', () => {
     context.append(
       {

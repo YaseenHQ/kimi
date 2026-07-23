@@ -1,5 +1,9 @@
 import { createDecorator } from '#/_base/di/instantiation';
-import type { FinishReason, ThinkingEffort } from '#/kosong/contract/provider';
+import type {
+  FinishReason,
+  ProviderCompactionResult,
+  ThinkingEffort,
+} from '#/kosong/contract/provider';
 import type { Message, StreamedMessagePart } from '#/kosong/contract/message';
 import type { Tool } from '#/kosong/contract/tool';
 import type { TokenUsage } from '#/kosong/contract/usage';
@@ -70,6 +74,11 @@ export interface IAgentLLMRequesterService {
     onPart?: AgentLLMRequestPartHandler,
     signal?: AbortSignal,
   ): AgentLLMRequestTask;
+
+  compact?(
+    overrides?: AgentLLMRequestOverrides,
+    signal?: AbortSignal,
+  ): Promise<ProviderCompactionResult | undefined>;
 }
 
 export const IAgentLLMRequesterService = createDecorator<IAgentLLMRequesterService>(

@@ -5,4 +5,6 @@
 "@moonshot-ai/kosong": patch
 ---
 
-Preserve opaque OpenAI Responses compaction state across conversation turns.
+Preserve opaque OpenAI Responses compaction state across turns and automatically
+use `/responses/compact` when the active provider exposes that capability,
+falling back to Kimi's existing local summarizer when it does not.

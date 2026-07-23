@@ -68,6 +68,12 @@ You can manage sessions without leaving the terminal. The following slash comman
 
 As a conversation grows, Kimi Code CLI automatically compresses the message history when the context approaches the window limit, freeing up token space. You can also trigger compression manually at any time:
 
+For OpenAI Responses-compatible providers, Kimi Code automatically tries the
+provider's native `/responses/compact` endpoint and preserves its opaque
+replacement state. If that capability is unavailable, or when `/compact`
+includes a custom instruction, it uses Kimi Code's existing summary compaction
+instead. No separate setting is required.
+
 ```
 /compact
 ```

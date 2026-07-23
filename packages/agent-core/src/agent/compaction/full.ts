@@ -61,6 +61,7 @@ export const MAX_COMPACTION_RETRY_ATTEMPTS = 5;
 const DEFAULT_COMPACTION_MAX_COMPLETION_TOKENS = 128 * 1024;
 const OVERFLOW_CONTEXT_SAFETY_RATIO = 0.85;
 const OVERFLOW_STATUS_RECOVERY_RATIO = 0.5;
+const REMOTE_COMPACTION_SUMMARY = '[OpenAI server compaction checkpoint]';
 
 class CompactionTruncatedError extends Error {
   constructor() {
@@ -77,6 +78,7 @@ export class FullCompaction {
     blockedByTurn: boolean;
   } | null = null;
   private readonly observedMaxContextTokensByModel = new Map<string, number>();
+  private readonly remoteCompactionUnavailableModels = new Set<string>();
   // Token count right after the last successful compaction. While no new
   // content has been appended (tokenCountWithPending <= this value), the
   // history is already in its minimal compacted form ([kept user prompts
@@ -435,6 +437,85 @@ export class FullCompaction {
         }),
         capability,
       });
+      const hasCustomInstruction = (data.instruction?.trim().length ?? 0) > 0;
+      // The native endpoint does not expose a portable custom-instruction field.
+      if (!hasCustomInstruction && !this.remoteCompactionUnavailableModels.has(model)) {
+        try {
+          const remote = await this.agent.compactProvider(
+            provider,
+            this.agent.config.systemPrompt,
+            [...this.agent.tools.loopTools],
+            this.agent.context.project(stripDynamicToolContext(originalHistory), {
+              synthesizeMissing: true,
+              dropOrphanResults: true,
+            }),
+            { signal },
+          );
+          if (remote !== undefined) {
+            const newHistory = this.agent.context.history;
+            for (let i = 0; i < originalHistory.length; i++) {
+              if (newHistory[i] !== originalHistory[i]) {
+                this.cancel();
+                return undefined;
+              }
+            }
+            if (
+              newHistory
+                .slice(originalHistory.length)
+                .some((message) => !isRealUserInput(message))
+            ) {
+              this.cancel();
+              return undefined;
+            }
+            if (remote.usage !== undefined) {
+              this.agent.usage.record(model, remote.usage);
+            }
+            const result = this.agent.context.applyCompaction({
+              summary: REMOTE_COMPACTION_SUMMARY,
+              contextSummary: REMOTE_COMPACTION_SUMMARY,
+              replacementMessages: remote.messages,
+              compactedCount: originalHistory.length,
+              tokensBefore,
+            });
+            this.agent.telemetry.track('compaction_finished', {
+              source: data.source,
+              tokens_before: result.tokensBefore,
+              tokens_after: result.tokensAfter,
+              duration_ms: Date.now() - startedAt,
+              compacted_count: result.compactedCount,
+              retry_count: 0,
+              round: 1,
+              thinking_effort: this.agent.config.thinkingEffort,
+              ...(remote.usage === undefined
+                ? {}
+                : {
+                    input_tokens: inputTotal(remote.usage),
+                    output_tokens: remote.usage.output,
+                  }),
+            });
+            this.lastCompactedTokenCount = this.tokenCountWithPending;
+            return result;
+          }
+          this.remoteCompactionUnavailableModels.add(model);
+        } catch (error) {
+          if (isAbortError(error)) return undefined;
+          if (
+            isKimiError(error) &&
+            (error.code === ErrorCodes.AUTH_LOGIN_REQUIRED ||
+              error.code === ErrorCodes.PROVIDER_AUTH_ERROR)
+          ) {
+            throw error;
+          }
+          const status = findAPIStatusError(error)?.statusCode;
+          if (status === 400 || status === 404 || status === 405 || status === 501) {
+            this.remoteCompactionUnavailableModels.add(model);
+          }
+          this.agent.log.warn('remote compaction unavailable; falling back to local summary', {
+            model,
+            status,
+          });
+        }
+      }
       const instruction = this.buildInstruction(data.instruction);
 
       const delays = retryBackoffDelays(MAX_COMPACTION_RETRY_ATTEMPTS);

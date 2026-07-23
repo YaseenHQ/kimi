@@ -160,6 +160,16 @@ export interface GenerateOptions {
 }
 
 /**
+ * Canonical replacement window returned by a provider-owned compaction API.
+ * The caller must install `messages` atomically and replay them unchanged.
+ */
+export interface ProviderCompactionResult {
+  readonly messages: readonly Message[];
+  readonly usage?: TokenUsage;
+  readonly id?: string;
+}
+
+/**
  * A constructed, immutable wire adapter. All construction-time variation
  * (endpoint, credentials, dialect hooks) is baked in by the factory; all
  * per-turn variation arrives via `GenerateOptions`.
@@ -177,5 +187,15 @@ export interface ChatProvider {
     history: Message[],
     options?: GenerateOptions,
   ): Promise<StreamedMessage>;
+  /**
+   * Compact a conversation using the provider's native protocol. Presence is
+   * the capability signal; providers without a native endpoint omit it.
+   */
+  compact?(
+    systemPrompt: string,
+    tools: Tool[],
+    history: Message[],
+    options?: GenerateOptions,
+  ): Promise<ProviderCompactionResult>;
   uploadVideo?(input: string | VideoUploadInput, options?: GenerateOptions): Promise<VideoURLPart>;
 }

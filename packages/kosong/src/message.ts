@@ -33,6 +33,11 @@ export interface OpenAICompactionPart {
   type: 'openai_compaction';
   encryptedContent: string;
   id?: string | undefined;
+  /** Origin identity used to prevent replaying opaque state to another backend. */
+  source?: {
+    readonly model: string;
+    readonly baseUrl?: string | undefined;
+  } | undefined;
 }
 
 /**

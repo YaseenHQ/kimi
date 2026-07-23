@@ -14,6 +14,7 @@
 import type { Message, StreamedMessagePart, VideoURLPart } from '#/kosong/contract/message';
 import type {
   FinishReason,
+  ProviderCompactionResult,
   ResponseFormat,
   SamplingOptions,
   ThinkingEffort,
@@ -101,6 +102,12 @@ export interface ModelRequester {
     signal?: AbortSignal,
     params?: ModelRequestParams,
   ): AsyncIterable<ModelRequestEvent>;
+
+  compact?(
+    input: ModelRequestInput,
+    signal?: AbortSignal,
+    params?: ModelRequestParams,
+  ): Promise<ProviderCompactionResult | undefined>;
 
   uploadVideo?(
     input: string | VideoUploadInput,

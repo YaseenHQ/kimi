@@ -312,6 +312,39 @@ export class ContextMemory {
   }
 
   applyCompaction(input: CompactionInput): CompactionResult {
+    if (input.replacementMessages !== undefined) {
+      const replacementMessages = input.replacementMessages as readonly ContextMessage[];
+      const contextSummary = input.contextSummary ?? input.summary;
+      const result: CompactionResult = {
+        summary: input.summary,
+        contextSummary,
+        compactedCount: input.compactedCount,
+        tokensBefore: input.tokensBefore,
+        tokensAfter: input.tokensAfter ?? estimateTokensForMessages(replacementMessages),
+        keptUserMessageCount:
+          input.keptUserMessageCount ??
+          replacementMessages.filter((message) => message.role === 'user').length,
+        keptHeadUserMessageCount: input.keptHeadUserMessageCount,
+        droppedCount: input.droppedCount,
+        replacementMessages: [...replacementMessages],
+      };
+      this.agent.records.logRecord({
+        type: 'context.apply_compaction',
+        ...result,
+      });
+      this.agent.replayBuilder.patchLast('compaction', { result });
+      this._history = [...replacementMessages];
+      this.openSteps.clear();
+      this.pendingToolResultIds.clear();
+      this.deferredMessages = [];
+      this._tokenCount = result.tokensAfter;
+      this.tokenCountCoveredMessageCount = this._history.length;
+      this.agent.microCompaction.reset();
+      this.agent.injection.onContextCompacted();
+      this.agent.tools.onContextCompacted();
+      this.agent.emitStatusUpdated();
+      return result;
+    }
     // Single derivation point for the post-compaction shape: the kept user
     // messages (verbatim, within the token budget — the oldest head plus the
     // most recent tail, with an elision marker between them when the pool

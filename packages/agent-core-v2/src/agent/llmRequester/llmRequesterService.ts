@@ -55,7 +55,10 @@ import {
   isRetryableGenerateError,
 } from '#/kosong/contract/errors';
 import { type Message } from '#/kosong/contract/message';
-import { type ThinkingEffort } from '#/kosong/contract/provider';
+import type {
+  ProviderCompactionResult,
+  ThinkingEffort,
+} from '#/kosong/contract/provider';
 import { type Tool } from '#/kosong/contract/tool';
 import { emptyUsage, inputTotal, type TokenUsage } from '#/kosong/contract/usage';
 import { ILogService, type LogContext } from '#/_base/log/log';
@@ -192,6 +195,23 @@ export class AgentLLMRequesterService implements IAgentLLMRequesterService {
       trace,
       result: this.requestWithTrace(trace, overrides, onPart, signal),
     };
+  }
+
+  async compact(
+    overrides: AgentLLMRequestOverrides = {},
+    signal?: AbortSignal,
+  ): Promise<ProviderCompactionResult | undefined> {
+    const request = this.resolveRequest(overrides);
+    const input = {
+      systemPrompt: request.systemPrompt,
+      tools: request.tools,
+      messages: request.messages,
+    };
+    const result = await request.requester.compact?.(input, signal, request.params);
+    if (result?.usage !== undefined) {
+      this.usage.record(request.modelAlias, result.usage, request.source);
+    }
+    return result;
   }
 
   private async requestWithTrace(

@@ -156,6 +156,7 @@ const contextCompactionBaseShape = {
   keptHeadUserMessageCount: z.number().optional(),
   droppedCount: z.number().optional(),
   legacyTail: z.boolean().optional(),
+  replacementMessages: z.array(contextMessageSchema).optional(),
 };
 
 const contextApplyCompactionSchema = z.union([
@@ -210,6 +211,7 @@ export function readContextCompactionShapeInput(
   const keptUserMessageCount = readOptionalNumber(fields, 'keptUserMessageCount');
   return {
     summary: readContextCompactionRawSummary(fields),
+    replacementMessages: readReplacementMessages(fields),
     legacySummaryMessage: readLegacySummaryMessage(fields),
     contextSummary: readOptionalString(fields, 'contextSummary'),
     compactedCount: readContextCompactedCount(fields),
@@ -220,6 +222,11 @@ export function readContextCompactionShapeInput(
     droppedCount: readOptionalNumber(fields, 'droppedCount'),
     legacyTail: readOptionalBoolean(fields, 'legacyTail') ?? keptUserMessageCount === undefined,
   };
+}
+
+function readReplacementMessages(record: UnknownRecord): readonly ContextMessage[] | undefined {
+  const value = record['replacementMessages'];
+  return Array.isArray(value) ? (value as ContextMessage[]) : undefined;
 }
 
 export function readContextCompactedCount(record: ContextCompactionRecord): number {

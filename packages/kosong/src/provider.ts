@@ -202,6 +202,16 @@ export interface StreamDecodeStats {
 }
 
 /**
+ * Canonical replacement window returned by a provider-owned compaction API.
+ * The caller must install `messages` atomically and replay them unchanged.
+ */
+export interface ProviderCompactionResult {
+  readonly messages: readonly Message[];
+  readonly usage?: TokenUsage;
+  readonly id?: string;
+}
+
+/**
  * In-memory video bytes for providers that require an uploaded file
  * reference instead of an inline data URL.
  */
@@ -251,6 +261,16 @@ export interface ChatProvider {
     history: Message[],
     options?: GenerateOptions,
   ): Promise<StreamedMessage>;
+  /**
+   * Compact a conversation using the provider's native protocol. Presence is
+   * the capability signal; providers without a native endpoint omit it.
+   */
+  compact?(
+    systemPrompt: string,
+    tools: Tool[],
+    history: Message[],
+    options?: GenerateOptions,
+  ): Promise<ProviderCompactionResult>;
   /** Return a shallow copy of this provider with the given thinking effort. */
   withThinking(effort: ThinkingEffort): ChatProvider;
   /**

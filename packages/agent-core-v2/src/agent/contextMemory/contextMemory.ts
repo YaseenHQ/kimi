@@ -6,6 +6,8 @@ import type { ContextMessage } from './types';
 
 export interface ContextCompactionInput {
   readonly summary: string;
+  /** Provider-owned canonical replacement window, when native compaction is used. */
+  readonly replacementMessages?: readonly ContextMessage[];
   readonly contextSummary?: string;
   readonly compactedCount: number;
   readonly tokensBefore: number;

@@ -171,7 +171,13 @@ function createService(
     get: () => ({ size: 0, measured: 0, estimated: 0 }),
     measured: () => undefined,
   };
-  const usage = { record: () => undefined, status: () => ({}) };
+  const usageRecords: Array<{ model: string; usage: ReturnType<typeof emptyUsage> }> = [];
+  const usage = {
+    record: (model: string, recordedUsage: ReturnType<typeof emptyUsage>) => {
+      usageRecords.push({ model, usage: recordedUsage });
+    },
+    status: () => ({}),
+  };
   const context = { get: () => history };
   const tools = { list: () => [] };
   const config: Partial<IConfigService> = {
@@ -242,8 +248,46 @@ function createService(
     records,
     events,
     telemetryRecords,
+    usageRecords,
   };
 }
+
+describe('AgentLLMRequesterService native compaction', () => {
+  it('records provider-reported compaction usage', async () => {
+    const requester = createRequester({ value: 0 }, null);
+    requester.compact = async () => ({
+      messages: [
+        {
+          role: 'assistant',
+          content: [{ type: 'openai_compaction', encryptedContent: 'opaque-state' }],
+          toolCalls: [],
+        },
+      ],
+      usage: {
+        inputOther: 80,
+        output: 20,
+        inputCacheRead: 10,
+        inputCacheCreation: 0,
+      },
+    });
+    const { service, usageRecords } = createService(requester, undefined);
+
+    const result = await service.compact?.();
+
+    expect(result?.messages[0]?.content[0]?.type).toBe('openai_compaction');
+    expect(usageRecords).toEqual([
+      {
+        model: 'm',
+        usage: {
+          inputOther: 80,
+          output: 20,
+          inputCacheRead: 10,
+          inputCacheCreation: 0,
+        },
+      },
+    ]);
+  });
+});
 
 describe('AgentLLMRequesterService Anthropic effort diagnostics', () => {
   it('warns and sends when the effort is not listed by the model', async () => {

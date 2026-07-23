@@ -243,6 +243,20 @@ export function reduceWireRecords(records: Iterable<AgentRecord>): {
         applyLoopEvent(record.event, record.time);
         break;
       case 'context.apply_compaction': {
+        if (record.replacementMessages !== undefined) {
+          transcript.push({
+            message: {
+              role: 'user',
+              content: [{ type: 'text', text: record.summary }],
+              toolCalls: [],
+              origin: { kind: 'compaction_summary' },
+            },
+            time: record.time,
+          });
+          foldedLength = record.replacementMessages.length;
+          resetOpenState();
+          break;
+        }
         // Mirrors ContextMemory.applyCompaction: the live context becomes the
         // kept user messages (head + tail, possibly separated by an elision
         // marker) followed by a user-role summary. The transcript keeps the

@@ -24,6 +24,7 @@ export interface CompactionUserSelection<T> {
 
 export interface ContextCompactionShapeInput {
   readonly summary: string;
+  readonly replacementMessages?: readonly ContextMessage[];
   readonly legacySummaryMessage?: ContextMessage;
   readonly contextSummary?: string;
   readonly compactedCount: number;
@@ -51,6 +52,22 @@ export function buildContextCompactionShape(
   history: readonly ContextMessage[],
   input: ContextCompactionShapeInput,
 ): ContextCompactionShape {
+  if (input.replacementMessages !== undefined) {
+    const messages = [...input.replacementMessages];
+    const contextSummary = input.contextSummary ?? input.summary;
+    return {
+      summary: input.summary,
+      contextSummary,
+      compactedCount: input.compactedCount,
+      tokensBefore: input.tokensBefore,
+      tokensAfter: input.tokensAfter ?? estimateTokensForMessages(messages),
+      keptUserMessageCount:
+        input.keptUserMessageCount ?? messages.filter((message) => message.role === 'user').length,
+      keptHeadUserMessageCount: input.keptHeadUserMessageCount,
+      droppedCount: input.droppedCount,
+      messages,
+    };
+  }
   if (usesLegacyTailShape(input)) {
     const contextSummary = input.contextSummary ?? input.summary;
     const messages = [

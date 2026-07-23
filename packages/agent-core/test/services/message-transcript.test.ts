@@ -214,6 +214,48 @@ describe('reduceWireRecords', () => {
     expect(foldedLength).toBe(3);
   });
 
+  it('keeps the readable transcript while tracking a provider-owned replacement window', () => {
+    const replacementMessages: ContextMessage[] = [
+      userMessage('u1'),
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'openai_compaction',
+            encryptedContent: 'opaque-state',
+            source: { model: 'gpt-5.4', baseUrl: 'https://api.openai.com/v1' },
+          },
+        ],
+        toolCalls: [],
+      },
+    ];
+    const { entries, foldedLength } = reduceWireRecords([
+      appendMessage(userMessage('u1')),
+      ...assistantStep('s1', 'a1'),
+      {
+        type: 'context.apply_compaction',
+        summary: '[OpenAI server compaction checkpoint]',
+        replacementMessages,
+        compactedCount: 2,
+        tokensBefore: 100,
+        tokensAfter: 20,
+      } as AgentRecord,
+      appendMessage(userMessage('u2')),
+    ]);
+
+    // REST consumers retain the readable pre-compaction conversation and a
+    // checkpoint marker. The opaque replacement belongs only to live model
+    // context, whose length is replacementMessages + the subsequently
+    // appended user message.
+    expect(entries.map((entry) => textOf(entry.message))).toEqual([
+      'u1',
+      'a1',
+      '[OpenAI server compaction checkpoint]',
+      'u2',
+    ]);
+    expect(foldedLength).toBe(3);
+  });
+
   it('drops a late tool result after compaction closes an open exchange', () => {
     const { entries, foldedLength } = reduceWireRecords([
       appendMessage(userMessage('u1')),

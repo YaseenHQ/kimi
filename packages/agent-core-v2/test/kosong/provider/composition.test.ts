@@ -913,6 +913,100 @@ describe('responseFormat wire encoding (per base)', () => {
     ]);
   });
 
+  it('uses the native compact endpoint and returns its canonical replacement window', async () => {
+    const provider = new OpenAIResponsesChatProvider({ model: 'gpt-5.4', apiKey: 'sk-probe' });
+    let captured: Record<string, unknown> | undefined;
+    const client = sdkClient(provider) as { responses: { compact: unknown } };
+    client.responses.compact = vi.fn().mockImplementation((params: unknown) => {
+      captured = params as Record<string, unknown>;
+      return Promise.resolve({
+        id: 'cmp_response_1',
+        output: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: 'Keep this request.' }],
+          },
+          { type: 'compaction', id: 'cmp_1', encrypted_content: 'opaque-state' },
+        ],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          input_tokens_details: { cached_tokens: 40 },
+        },
+      });
+    });
+
+    const result = await provider.compact('', [], [
+      { role: 'user', content: [{ type: 'text', text: 'Keep this request.' }], toolCalls: [] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Old answer.' }], toolCalls: [] },
+    ], { cacheKey: 'session-probe' });
+
+    expect(captured).toEqual({
+      model: 'gpt-5.4',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'Keep this request.' }],
+        },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'Old answer.', annotations: [] }],
+        },
+      ],
+      prompt_cache_key: 'session-probe',
+    });
+    expect(result).toEqual({
+      id: 'cmp_response_1',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Keep this request.' }],
+          toolCalls: [],
+        },
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'openai_compaction',
+              encryptedContent: 'opaque-state',
+              id: 'cmp_1',
+              source: { model: 'gpt-5.4', baseUrl: 'https://api.openai.com/v1' },
+            },
+          ],
+          toolCalls: [],
+        },
+      ],
+      usage: {
+        inputOther: 60,
+        output: 20,
+        inputCacheRead: 40,
+        inputCacheCreation: 0,
+      },
+    });
+  });
+
+  it('does not replay opaque compaction state to another Responses model', async () => {
+    const provider = new OpenAIResponsesChatProvider({ model: 'gpt-4.1', apiKey: 'sk-probe' });
+    const body = await captureResponsesBody(provider, undefined, [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'openai_compaction',
+            encryptedContent: 'other-model-state',
+            source: { model: 'gpt-5.4', baseUrl: 'https://api.openai.com/v1' },
+          },
+        ],
+        toolCalls: [],
+      },
+    ]);
+
+    expect(body['input']).toEqual([]);
+  });
+
   it('drops compaction-only assistant shells when switching provider protocols', async () => {
     const history: Message[] = [
       {

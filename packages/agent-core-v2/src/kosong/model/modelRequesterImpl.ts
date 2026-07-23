@@ -28,6 +28,7 @@ import { generate, type GenerateResult } from '#/kosong/contract/generate';
 import type {
   ChatProvider,
   GenerateOptions,
+  ProviderCompactionResult,
   ProviderRequestAuth,
   StreamDecodeStats,
   VideoUploadInput,
@@ -77,6 +78,29 @@ export class ModelRequesterImpl implements ModelRequester {
       (error) => queue.fail(error),
     );
     return queue;
+  }
+
+  async compact(
+    input: ModelRequestInput,
+    signal?: AbortSignal,
+    params?: ModelRequestParams,
+  ): Promise<ProviderCompactionResult | undefined> {
+    signal?.throwIfAborted();
+    const provider = this.resolveChatProvider();
+    if (provider.compact === undefined) return undefined;
+    const compact = provider.compact.bind(provider);
+    try {
+      return await this.runWithAuthRefresh((auth) =>
+        compact(input.systemPrompt, [...input.tools], [...input.messages], {
+          signal,
+          auth,
+          cacheKey: params?.cacheKey,
+        }),
+      );
+    } catch (error) {
+      if (isAbortError(error) || signal?.aborted === true) throw error;
+      throw translateProviderError(error);
+    }
   }
 
   async uploadVideo(
