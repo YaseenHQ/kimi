@@ -17,6 +17,7 @@ const FULL_FILE = `---
 name: code-reviewer
 description: 严格的代码审查 agent
 whenToUse: 代码评审、PR 检查
+model: reviewer-model
 override: true
 tools:
   - Read
@@ -44,6 +45,7 @@ describe('parseAgentFileText', () => {
     expect(def.name).toBe('code-reviewer');
     expect(def.description).toBe('严格的代码审查 agent');
     expect(def.whenToUse).toBe('代码评审、PR 检查');
+    expect(def.model).toBe('reviewer-model');
     expect(def.override).toBe(true);
     expect(def.tools).toEqual(['Read', 'Grep', 'mcp__github__*']);
     expect(def.disallowedTools).toEqual(['Bash']);
@@ -60,6 +62,7 @@ describe('parseAgentFileText', () => {
     expect(def.disallowedTools).toBeUndefined();
     expect(def.subagents).toBeUndefined();
     expect(def.whenToUse).toBeUndefined();
+    expect(def.model).toBeUndefined();
     expect(def.prompt).toBe('body');
   });
 
@@ -124,6 +127,24 @@ describe('parseAgentFileText', () => {
   it('rejects a non-boolean override field', () => {
     expect(() => parse('---\nname: solo\ndescription: d\noverride: yes\n---\n\nbody\n')).toThrow(
       /"override"/,
+    );
+  });
+
+  it('parses an explicit model and treats "inherit" as the default', () => {
+    expect(parse('---\nname: solo\ndescription: d\nmodel: reviewer-model\n---\n\nbody\n').model).toBe(
+      'reviewer-model',
+    );
+    expect(
+      parse('---\nname: solo\ndescription: d\nmodel: inherit\n---\n\nbody\n').model,
+    ).toBeUndefined();
+  });
+
+  it('rejects an invalid model field', () => {
+    expect(() => parse('---\nname: solo\ndescription: d\nmodel: 42\n---\n\nbody\n')).toThrow(
+      /"model"/,
+    );
+    expect(() => parse('---\nname: solo\ndescription: d\nmodel: " "\n---\n\nbody\n')).toThrow(
+      /"model"/,
     );
   });
 
@@ -256,6 +277,12 @@ describe('agentProfileFromFile', () => {
     const profile = agentProfileFromFile({ ...base, subagents: ['explore'] }, basePrompt);
 
     expect(profile.subagents).toEqual(['explore']);
+  });
+
+  it('passes an explicit model through', () => {
+    const profile = agentProfileFromFile({ ...base, model: 'reviewer-model' }, basePrompt);
+
+    expect(profile.model).toBe('reviewer-model');
   });
 
   it('treats an explicit file as an override intent', () => {

@@ -26,6 +26,7 @@ import { IAgentUserToolService } from '#/agent/userTool/userTool';
 import { IEventBus } from '#/app/event/eventBus';
 import { ISessionAgentProfileCatalog } from '#/session/sessionAgentProfileCatalog/sessionAgentProfileCatalog';
 import { applyProfilePromptPrefix } from '#/app/agentProfileCatalog/promptPrefix';
+import { agentProfileModelAlias } from '#/app/agentProfileCatalog/profile-shared';
 import { IAgentLifecycleService } from '#/session/agentLifecycle/agentLifecycle';
 import {
   isSubagentMeta,
@@ -144,11 +145,12 @@ export class SessionSwarmService implements ISessionSwarmService {
     if (callerData.modelAlias === undefined) {
       throw new Error('Caller agent has no model bound');
     }
+    const modelAlias = agentProfileModelAlias(profile, callerData.modelAlias);
     const child = await this.lifecycle.create({
       binding: {
         profile: profile.name,
-        model: callerData.modelAlias,
-        thinking: callerData.thinkingLevel,
+        model: modelAlias,
+        thinking: modelAlias === callerData.modelAlias ? callerData.thinkingLevel : undefined,
         cwd: callerData.cwd,
       },
       labels: subagentLabels(callerAgentId, { swarmItem: options.swarmItem }),
@@ -189,7 +191,7 @@ export class SessionSwarmService implements ISessionSwarmService {
     const caller = this.requireHandle(callerAgentId, 'Caller agent');
     const child = this.requireHandle(agentId, 'Agent instance');
     this.requireIdleSubagent(agentId, child);
-    this.realignChildModel(caller, child);
+    await this.realignChildModel(caller, child);
     const profileName =
       child.accessor.get(IAgentProfileService).data().profileName ?? RESUMED_PROFILE_FALLBACK;
     if (!retryTurn) {
@@ -238,11 +240,21 @@ export class SessionSwarmService implements ISessionSwarmService {
     return handle;
   }
 
-  private realignChildModel(caller: IAgentScopeHandle, child: IAgentScopeHandle): void {
-    const modelAlias = caller.accessor.get(IAgentProfileService).data().modelAlias;
-    if (modelAlias === undefined) {
+  private async realignChildModel(
+    caller: IAgentScopeHandle,
+    child: IAgentScopeHandle,
+  ): Promise<void> {
+    const inheritedModelAlias = caller.accessor.get(IAgentProfileService).data().modelAlias;
+    if (inheritedModelAlias === undefined) {
       throw new Error('Caller agent has no model bound');
     }
+    await this.catalog.ready;
+    const profileName = child.accessor.get(IAgentProfileService).data().profileName;
+    const profile = profileName === undefined ? undefined : this.catalog.get(profileName);
+    const modelAlias =
+      profile === undefined
+        ? inheritedModelAlias
+        : agentProfileModelAlias(profile, inheritedModelAlias);
     child.accessor.get(IAgentProfileService).update({ modelAlias });
   }
 

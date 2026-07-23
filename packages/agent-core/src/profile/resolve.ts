@@ -10,6 +10,7 @@ import type {
 interface MergedAgentProfile {
   readonly name: string;
   readonly description?: string | undefined;
+  readonly model?: string | undefined;
   readonly systemPromptTemplate: string;
   readonly promptVars: Record<string, string>;
   readonly tools: string[];
@@ -92,6 +93,10 @@ function resolveMergedProfile(
   const merged: MergedAgentProfile = {
     name: profile.name,
     description: profile.description,
+    model:
+      profile.model === 'inherit'
+        ? undefined
+        : (profile.model ?? parent?.model),
     systemPromptTemplate: profile.systemPromptTemplate ?? parent?.systemPromptTemplate ?? '',
     promptVars: {
       ...parent?.promptVars,
@@ -110,6 +115,7 @@ function toResolvedProfile(merged: MergedAgentProfile): ResolvedAgentProfile {
   return {
     name: merged.name,
     description: merged.description,
+    model: merged.model,
     systemPrompt: createSystemPromptRenderer(merged),
     tools: [...merged.tools],
     whenToUse: merged.whenToUse,

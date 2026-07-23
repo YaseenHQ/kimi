@@ -58,6 +58,15 @@ export function subagentTypeNotAllowedMessage(
   return `Subagent type "${name}" is not allowed for this agent. Allowed subagent types: ${allowed}.`;
 }
 
+export function agentProfileModelAlias(
+  profile: Pick<AgentProfile, 'model'>,
+  inheritedModelAlias: string,
+): string {
+  return profile.model === undefined || profile.model === 'inherit'
+    ? inheritedModelAlias
+    : profile.model;
+}
+
 const WINDOWS_NOTES =
   'IMPORTANT: You are on Windows. The Bash tool runs through Git Bash, so use Unix shell syntax inside Bash commands — `/dev/null` not `NUL`, and forward slashes in paths. For file operations, always prefer the built-in tools (Read, Write, Edit, Glob, Grep) over Bash commands — they work reliably across all platforms.';
 
