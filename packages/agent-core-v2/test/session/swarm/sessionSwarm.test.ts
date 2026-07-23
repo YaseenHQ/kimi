@@ -13,6 +13,7 @@ import { IAgentProfileService, type ProfileData } from '#/agent/profile/profile'
 import { IAgentLoopService } from '#/agent/loop/loop';
 import { IAgentUserToolService } from '#/agent/userTool/userTool';
 import { IEventBus, type DomainEvent } from '#/app/event/eventBus';
+import type { AgentProfile } from '#/app/agentProfileCatalog/agentProfileCatalog';
 import { ISessionAgentProfileCatalog } from '#/session/sessionAgentProfileCatalog/sessionAgentProfileCatalog';
 import { APIProviderRateLimitError } from '#/kosong/contract/errors';
 import { ITelemetryService, noopTelemetryService } from '#/app/telemetry/telemetry';
@@ -843,6 +844,7 @@ describe('SessionSwarmService metadata compatibility', () => {
   let createAgent: ReturnType<typeof vi.fn>;
   let runAgent: ReturnType<typeof vi.fn>;
   let eventBus: IEventBus;
+  let coderProfile: AgentProfile;
 
   beforeEach(() => {
     disposables = new DisposableStore();
@@ -854,6 +856,7 @@ describe('SessionSwarmService metadata compatibility', () => {
     subagents = subagentStub();
     createAgent = lifecycle.create as ReturnType<typeof vi.fn>;
     runAgent = subagents.run as ReturnType<typeof vi.fn>;
+    coderProfile = { name: 'coder', tools: [], systemPrompt: () => '' };
     handles.set('main', agentHandle('main', lifecycle, eventBus));
 
     ix.stub(IAgentLifecycleService, lifecycle);
@@ -861,10 +864,7 @@ describe('SessionSwarmService metadata compatibility', () => {
     ix.stub(ISessionAgentProfileCatalog, {
       _serviceBrand: undefined,
       ready: Promise.resolve(),
-      get: (name: string) =>
-        name === 'coder'
-          ? { name: 'coder', tools: [], systemPrompt: () => '' }
-          : undefined,
+      get: (name: string) => (name === 'coder' ? coderProfile : undefined),
       getDefault: () => ({ name: 'agent', tools: [], systemPrompt: () => '' }),
       list: () => [],
     });
@@ -1004,6 +1004,27 @@ describe('SessionSwarmService metadata compatibility', () => {
     );
   });
 
+  it('binds spawned swarm children to the model declared by their profile', async () => {
+    coderProfile = { ...coderProfile, model: 'reviewer-model' };
+    const service = ix.get(ISessionSwarmService);
+
+    await service.run({
+      callerAgentId: 'main',
+      tasks: [spawnSessionTask('src/a.ts')],
+    });
+
+    expect(createAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        binding: {
+          profile: 'coder',
+          model: 'reviewer-model',
+          thinking: undefined,
+          cwd: '/repo',
+        },
+      }),
+    );
+  });
+
   it('inherits parent user tools on spawned children', async () => {
     const parentUserTools = userToolServiceStub();
     const childUserTools = userToolServiceStub();
@@ -1086,6 +1107,26 @@ describe('SessionSwarmService metadata compatibility', () => {
       { kind: 'prompt', prompt: 'Continue' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it('realigns resumed swarm children to their explicit profile model', async () => {
+    coderProfile = { ...coderProfile, model: 'reviewer-model' };
+    agents['agent-existing'] = {
+      labels: { parentAgentId: 'main' },
+    };
+    const child = agentHandle('agent-existing', lifecycle, eventBus, {
+      profileName: 'coder',
+      modelAlias: 'stale-model',
+    });
+    handles.set('agent-existing', child);
+    const service = ix.get(ISessionSwarmService);
+
+    await service.run({
+      callerAgentId: 'main',
+      tasks: [resumeSessionTask('agent-existing')],
+    });
+
+    expect(child.accessor.get(IAgentProfileService).data().modelAlias).toBe('reviewer-model');
   });
 
   it('does not emit spawned again when a rate-limited child retries', async () => {

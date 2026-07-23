@@ -13,6 +13,7 @@ export const RawAgentProfileSchema = z.object({
   extends: z.string().optional(),
   name: z.string().min(1),
   description: z.string().optional(),
+  model: z.string().min(1).optional(),
   systemPromptPath: z.string().optional(),
   systemPromptTemplate: z.string().optional(),
   promptVars: z.record(z.string(), z.string()).optional(),
@@ -49,6 +50,7 @@ export type SystemPromptRenderer = (context: SystemPromptContext) => string;
 export interface ResolvedAgentProfile {
   name: string;
   description?: string;
+  model?: string;
   systemPrompt: SystemPromptRenderer;
   tools: string[];
   whenToUse?: string;

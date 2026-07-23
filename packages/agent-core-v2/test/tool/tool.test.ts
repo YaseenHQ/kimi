@@ -490,6 +490,7 @@ describe('Agent tool description', () => {
     const restricted: AgentProfile = {
       name: 'restricted',
       description: 'Restricted agent',
+      model: 'reviewer-model',
       tools: ['Bash', 'Read', 'mcp__github__*'],
       disallowedTools: ['Bash', 'mcp__github__*'],
       systemPrompt: () => 'restricted',
@@ -515,7 +516,9 @@ describe('Agent tool description', () => {
 
     const description = agentDescription();
 
-    expect(description).toContain('- restricted: Restricted agent\n  Tools: Read');
+    expect(description).toContain(
+      '- restricted: Restricted agent\n  Model: reviewer-model\n  Tools: Read',
+    );
     expect(description).toContain('- allow-all-except: Allow all except one\n  Tools: all except Bash');
     expect(description).not.toContain('Tools: Bash, Read, mcp__github__*');
   });
@@ -742,6 +745,37 @@ describe('Agent tool execution contract', () => {
       }),
     );
     expect(result.output).toContain('actual_subagent_type: explore');
+  });
+
+  it('binds a spawned subagent to the model declared by its profile', async () => {
+    const lifecycle = createAgentLifecycleStub({
+      createAgentIds: ['agent-child'],
+      runCompletion: async () => ({ summary: 'child result' }),
+    });
+    const catalog = allowlistCatalog(['explore']);
+    const explore = catalog.get('explore');
+    if (explore === undefined) throw new Error('expected explore profile');
+    Object.assign(explore, { model: 'reviewer-model' });
+    const context = createAgentToolContext(
+      lifecycle,
+      sessionService(ISessionAgentProfileCatalog, catalog),
+    );
+
+    await executeAgentTool(context, {
+      prompt: 'Investigate',
+      description: 'Find cause',
+      subagent_type: 'explore',
+    });
+
+    expect(lifecycle.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        binding: expect.objectContaining({
+          profile: 'explore',
+          model: 'reviewer-model',
+          thinking: undefined,
+        }),
+      }),
+    );
   });
 
   it('declares no resource accesses so concurrent Agent calls can run in parallel', async () => {
@@ -1113,6 +1147,43 @@ describe('Agent tool execution contract', () => {
       { kind: 'prompt', prompt: 'Continue' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it('realigns a directly resumed subagent to its explicit profile model', async () => {
+    const targetProfile = {
+      _serviceBrand: undefined,
+      data: () => ({ profileName: 'explore', modelAlias: 'stale-model' }),
+      update: vi.fn(),
+      isToolActive: () => false,
+    } as unknown as IAgentProfileService;
+    const lifecycle = createAgentLifecycleStub({
+      runCompletion: async () => ({ summary: 'resumed result' }),
+    });
+    const catalog = allowlistCatalog(['explore']);
+    const explore = catalog.get('explore');
+    if (explore === undefined) throw new Error('expected explore profile');
+    Object.assign(explore, { model: 'reviewer-model' });
+    const context = createAgentToolContext(
+      lifecycle,
+      sessionService(ISessionAgentProfileCatalog, catalog),
+      sessionService(
+        ISessionMetadata,
+        sessionMetadataStub({ 'agent-existing': subagentMeta() }),
+      ),
+    );
+    lifecycle.addHandle(
+      'agent-existing',
+      'explore',
+      new Map([[IAgentProfileService, targetProfile]]),
+    );
+
+    await executeAgentTool(context, {
+      prompt: 'Continue',
+      description: 'Continue work',
+      resume: 'agent-existing',
+    });
+
+    expect(targetProfile.update).toHaveBeenCalledWith({ modelAlias: 'reviewer-model' });
   });
 
   it('registers background subagents with the task manager', async () => {

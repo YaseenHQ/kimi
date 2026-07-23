@@ -381,8 +381,9 @@ function buildSubagentDescriptions(subagents: ResolvedAgentProfile['subagents'])
         (part): part is string => part !== undefined && part.length > 0,
       );
       const header = details.length === 0 ? `- ${name}` : `- ${name}: ${details.join(' ')}`;
-      if (subagent.tools.length === 0) return header;
-      return `${header}\n  Tools: ${subagent.tools.join(', ')}`;
+      const model = subagent.model === undefined ? '' : `\n  Model: ${subagent.model}`;
+      if (subagent.tools.length === 0) return `${header}${model}`;
+      return `${header}${model}\n  Tools: ${subagent.tools.join(', ')}`;
     })
     .join('\n');
 }

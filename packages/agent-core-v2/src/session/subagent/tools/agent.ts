@@ -51,6 +51,7 @@ import { type AgentProfile } from '#/app/agentProfileCatalog/agentProfileCatalog
 import { ISessionAgentProfileCatalog } from '#/session/sessionAgentProfileCatalog/sessionAgentProfileCatalog';
 import { applyProfilePromptPrefix } from '#/app/agentProfileCatalog/promptPrefix';
 import {
+  agentProfileModelAlias,
   subagentAllowlistFor,
   subagentTypeNotAllowedMessage,
 } from '#/app/agentProfileCatalog/profile-shared';
@@ -256,7 +257,7 @@ export class AgentTool implements BuiltinTool<AgentToolInput> {
         throw new Error(`Agent instance "${resumeAgentId}" does not exist`);
       }
       await this.ensureOwnedIdleSubagent(resumeAgentId, target);
-      this.realignChildModel(target);
+      await this.realignChildModel(target);
       agentId = target.id;
       profileName =
         target.accessor.get(IAgentProfileService).data().profileName ?? RESUMED_LABEL;
@@ -277,11 +278,12 @@ export class AgentTool implements BuiltinTool<AgentToolInput> {
       if (own.modelAlias === undefined) {
         throw new Error('Caller agent has no model bound');
       }
+      const modelAlias = agentProfileModelAlias(profile, own.modelAlias);
       const created = await this.lifecycle.create({
         binding: {
           profile: profile.name,
-          model: own.modelAlias,
-          thinking: own.thinkingLevel,
+          model: modelAlias,
+          thinking: modelAlias === own.modelAlias ? own.thinkingLevel : undefined,
           cwd: own.cwd,
         },
         labels: subagentLabels(this.callerAgentId),
@@ -343,11 +345,18 @@ export class AgentTool implements BuiltinTool<AgentToolInput> {
     }
   }
 
-  private realignChildModel(target: IAgentScopeHandle): void {
-    const modelAlias = this.profile.data().modelAlias;
-    if (modelAlias === undefined) {
+  private async realignChildModel(target: IAgentScopeHandle): Promise<void> {
+    const ownModelAlias = this.profile.data().modelAlias;
+    if (ownModelAlias === undefined) {
       throw new Error('Caller agent has no model bound');
     }
+    await this.catalog.ready;
+    const profileName = target.accessor.get(IAgentProfileService).data().profileName;
+    const targetProfile = profileName === undefined ? undefined : this.catalog.get(profileName);
+    const modelAlias =
+      targetProfile === undefined
+        ? ownModelAlias
+        : agentProfileModelAlias(targetProfile, ownModelAlias);
     target.accessor.get(IAgentProfileService).update({ modelAlias });
   }
 
@@ -486,6 +495,7 @@ function buildProfileDescriptions(
         (part): part is string => part !== undefined && part.length > 0,
       );
       const header = details.length === 0 ? `- ${profile.name}` : `- ${profile.name}: ${details.join(' ')}`;
+      const model = profile.model === undefined ? '' : `\n  Model: ${profile.model}`;
       const activeTools = resolveActiveToolNames(profile);
       const externallyRestricted = tools.some(
         (tool) =>
@@ -497,20 +507,20 @@ function buildProfileDescriptions(
           .filter((tool) => isToolActive(profile, tool.name, tool.source))
           .map((tool) => tool.name);
         if (effectiveTools.length === 0) {
-          return `${header}\n  Tools: none`;
+          return `${header}${model}\n  Tools: none`;
         }
-        return `${header}\n  Tools: ${effectiveTools.join(', ')}`;
+        return `${header}${model}\n  Tools: ${effectiveTools.join(', ')}`;
       }
       if (activeTools === undefined) {
         if ((profile.disallowedTools?.length ?? 0) > 0) {
-          return `${header}\n  Tools: all except ${profile.disallowedTools!.join(', ')}`;
+          return `${header}${model}\n  Tools: all except ${profile.disallowedTools!.join(', ')}`;
         }
-        return `${header}\n  Tools: all`;
+        return `${header}${model}\n  Tools: all`;
       }
       if (activeTools.length === 0) {
-        return `${header}\n  Tools: none`;
+        return `${header}${model}\n  Tools: none`;
       }
-      return `${header}\n  Tools: ${activeTools.join(', ')}`;
+      return `${header}${model}\n  Tools: ${activeTools.join(', ')}`;
     })
     .join('\n');
 }
