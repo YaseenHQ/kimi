@@ -1367,6 +1367,11 @@ export class OpenAIResponsesChatProvider implements ChatProvider {
     if (systemPrompt) params['instructions'] = systemPrompt;
     const cacheKey = this._generationKwargs['prompt_cache_key'];
     if (typeof cacheKey === 'string') params['prompt_cache_key'] = cacheKey;
+    // Preserve the encrypted reasoning chain across the compaction boundary.
+    // Codex sets `include: ["reasoning.encrypted_content"]` unconditionally on
+    // every Responses request (compaction included); without it the model
+    // retains message continuity but loses its accumulated reasoning state.
+    params['include'] = ['reasoning.encrypted_content'];
 
     try {
       const client = this._createClient(options?.auth);

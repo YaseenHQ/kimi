@@ -140,6 +140,9 @@ describe('OpenAIResponsesChatProvider', () => {
         },
       ],
       prompt_cache_key: 'session-probe',
+      // Compaction preserves the encrypted reasoning chain across the boundary
+      // (matches Codex's unconditional include on every Responses request).
+      include: ['reasoning.encrypted_content'],
     });
     expect(result.messages).toEqual([
       {
