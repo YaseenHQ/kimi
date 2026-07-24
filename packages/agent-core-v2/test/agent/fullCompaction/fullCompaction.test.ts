@@ -36,7 +36,7 @@ import { MASTER_ENV } from '#/app/flag/flagService';
 import { estimateTokensForMessages } from '#/kosong/contract/tokens';
 import { recordingTelemetry, type TelemetryRecord } from '../../app/telemetry/stubs';
 import type { TestAgentContext, TestAgentOptions, TestAgentServiceOverride } from '../../harness';
-import { appServices, createCommandRunner, execEnvServices, hostEnvironmentServices, sessionServices, testAgent } from '../../harness';
+import { agentService, appServices, createCommandRunner, execEnvServices, hostEnvironmentServices, sessionServices, testAgent } from '../../harness';
 import {
   IAgentFullCompactionService,
   IModelOAuthTokens,
@@ -50,6 +50,7 @@ import {
 } from '#/index';
 import { IAgentLoopService } from '#/agent/loop/loop';
 import { IAgentContextSizeService } from '#/agent/contextSize/contextSize';
+import { IAgentLLMRequesterService } from '#/agent/llmRequester/llmRequester';
 import { IAgentGoalService } from '#/agent/goal/goal';
 import { IAgentTelemetryContextService } from '#/app/telemetry/agentTelemetryContext';
 import { HostFileSystem } from '#/os/backends/node-local/hostFsService';
@@ -313,6 +314,68 @@ describe('FullCompaction', () => {
         input_cache_creation: 0,
       }),
     });
+    await ctx.expectResumeMatches();
+  });
+
+  it('prefers provider-owned compaction and installs its replacement window', async () => {
+    let compactCalls = 0;
+    const requester: IAgentLLMRequesterService = {
+      _serviceBrand: undefined,
+      prepareTurnConfig: () => undefined,
+      request: async () => {
+        throw new Error('local summarizer should not run');
+      },
+      start: () => {
+        throw new Error('local summarizer should not run');
+      },
+      compact: async () => {
+        compactCalls += 1;
+        return {
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'old request' }],
+              toolCalls: [],
+            },
+            {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'openai_compaction',
+                  encryptedContent: 'opaque-state',
+                  id: 'cmp_1',
+                },
+              ],
+              toolCalls: [],
+            },
+          ],
+          usage: {
+            inputOther: 80,
+            output: 20,
+            inputCacheRead: 0,
+            inputCacheCreation: 0,
+          },
+        };
+      },
+    };
+    const ctx = testAgent(agentService(IAgentLLMRequesterService, requester));
+    ctx.configure({
+      provider: CATALOGUED_PROVIDER,
+      modelCapabilities: CATALOGUED_MODEL_CAPABILITIES,
+    });
+    ctx.appendExchange(1, 'old request', 'old answer', 20);
+    const completed = ctx.once('compaction.completed');
+
+    await ctx.rpc.beginCompaction({});
+    await completed;
+
+    expect(compactCalls).toBe(1);
+    expect(
+      ctx.context.get().some((message) =>
+        message.content.some((part) => part.type === 'openai_compaction'),
+      ),
+    ).toBe(true);
+    expect(ctx.llmCalls).toHaveLength(0);
     await ctx.expectResumeMatches();
   });
 

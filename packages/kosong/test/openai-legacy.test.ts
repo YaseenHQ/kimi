@@ -125,6 +125,21 @@ describe('OpenAILegacyChatProvider', () => {
       ]);
     });
 
+    it('drops compaction-only assistant shells from Chat Completions history', async () => {
+      const provider = createProvider();
+      const history: Message[] = [
+        {
+          role: 'assistant',
+          content: [{ type: 'openai_compaction', encryptedContent: 'encrypted-summary' }],
+          toolCalls: [],
+        },
+        { role: 'user', content: [{ type: 'text', text: 'Continue' }], toolCalls: [] },
+      ];
+      const body = await captureRequestBody(provider, '', [], history);
+
+      expect(body['messages']).toEqual([{ role: 'user', content: 'Continue' }]);
+    });
+
     it('multi-turn with system prompt', async () => {
       const provider = createProvider();
       const history: Message[] = [

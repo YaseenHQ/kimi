@@ -948,6 +948,7 @@ export class AgentLoopService extends Disposable implements IAgentLoopService {
         case 'image_url':
         case 'audio_url':
         case 'video_url':
+        case 'openai_compaction':
           return;
         case 'function': {
           onResponseEvent();

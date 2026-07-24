@@ -34,7 +34,10 @@ import type {
   ToolCall,
   VideoURLPart,
 } from '#/kosong/contract/message';
-import { isToolDeclarationOnlyMessage } from '#/kosong/contract/message';
+import {
+  isOpaqueAssistantMessage,
+  isToolDeclarationOnlyMessage,
+} from '#/kosong/contract/message';
 import type {
   ChatProvider,
   FinishReason,
@@ -357,6 +360,7 @@ function convertHistoryMessages(
 
   for (const msg of history) {
     if (isToolDeclarationOnlyMessage(msg)) continue;
+    if (isOpaqueAssistantMessage(msg)) continue;
     if (msg.role !== 'tool') {
       appendToolResultMediaMessage(messages, pendingToolResultMedia);
     }
@@ -617,6 +621,7 @@ export class OpenAILegacyChatProvider implements ChatProvider {
       // Trait mode: the tool-declaration-only skip and the tool-result media
       // extraction are handed over to the trait wholesale.
       for (const msg of normalizedHistory) {
+        if (isOpaqueAssistantMessage(msg)) continue;
         const converted = convertMessage(msg, this._reasoningKey, null, preserveThinking, false);
         const shaped = convertMessageHook(msg, converted);
         if (shaped !== null) {

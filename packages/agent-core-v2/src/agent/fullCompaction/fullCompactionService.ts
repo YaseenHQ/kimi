@@ -74,6 +74,7 @@ const OVERFLOW_CONTEXT_SAFETY_RATIO = 0.85;
 const OVERFLOW_STATUS_RECOVERY_RATIO = 0.5;
 const MAX_COMPACTION_OVERFLOW_SHRINK_ATTEMPTS = 3;
 const COMPACTION_OVERFLOW_SHRINK_RATIOS = [0.7, 0.5, 0.35] as const;
+const REMOTE_COMPACTION_SUMMARY = '[OpenAI server compaction checkpoint]';
 const EMPTY_TOOL_PARAMETERS: Record<string, unknown> = {
   type: 'object',
   properties: {},
@@ -115,6 +116,7 @@ export class AgentFullCompactionService extends Disposable implements IAgentFull
   private compactionCountInTurn = 0;
   private _compacting: ActiveCompaction | null = null;
   private readonly observedMaxContextTokensByModel = new Map<string, number>();
+  private readonly remoteCompactionUnavailableModels = new Set<string>();
   private lastCompactedTokenCount: number | null = null;
   private consecutiveOverflowCompactions = 0;
   private activeTurnId: number | undefined;
@@ -537,6 +539,71 @@ export class AgentFullCompactionService extends Disposable implements IAgentFull
 
       const resolvedModel = this.profile.resolveModelContext();
       thinkingEffort = resolvedModel.thinkingLevel;
+
+      const modelAlias = resolvedModel.modelAlias;
+      const hasCustomInstruction = (data.instruction?.trim().length ?? 0) > 0;
+      // Provider-owned compaction has no portable custom-instruction field.
+      if (!hasCustomInstruction && !this.remoteCompactionUnavailableModels.has(modelAlias)) {
+        try {
+          const remote = await this.llmRequester.compact?.(
+            {
+              messages: stripDynamicToolContext(originalHistory),
+              source: {
+                type: 'operation',
+                turnId: active.originTurnId,
+                requestKind: 'remote_compaction',
+              },
+            },
+            signal,
+          );
+          if (remote !== undefined) {
+            if (!historySafeToCompact(this.context.get(), originalHistory)) {
+              this.cancelActive(active);
+              throw compactionCancelledReason(active);
+            }
+            const result = this.context.applyCompaction({
+              summary: REMOTE_COMPACTION_SUMMARY,
+              contextSummary: REMOTE_COMPACTION_SUMMARY,
+              replacementMessages: remote.messages as readonly ContextMessage[],
+              compactedCount: originalHistory.length,
+              tokensBefore,
+            });
+            const properties: CompactionFinishedEvent = {
+              turn_id: active.originTurnId,
+              source: data.source,
+              tokens_before: result.tokensBefore,
+              tokens_after: result.tokensAfter,
+              duration_ms: Date.now() - startedAt,
+              compacted_count: result.compactedCount,
+              retry_count: 0,
+              round: 1,
+              thinking_effort: thinkingEffort,
+              ...usageTelemetry(remote.usage ?? null),
+            };
+            this.telemetry.track2('compaction_finished', properties);
+            return result;
+          }
+          this.remoteCompactionUnavailableModels.add(modelAlias);
+        } catch (error) {
+          if (isAbortError(error)) throw error;
+          if (
+            isError2(error) &&
+            (error.code === ErrorCodes.AUTH_LOGIN_REQUIRED ||
+              error.code === ErrorCodes.PROVIDER_AUTH_ERROR)
+          ) {
+            throw error;
+          }
+          const status = findAPIStatusError(error)?.statusCode;
+          if (status === 400 || status === 404 || status === 405 || status === 501) {
+            this.remoteCompactionUnavailableModels.add(modelAlias);
+          }
+          this.log.warn('remote compaction unavailable; falling back to local summary', {
+            model: modelAlias,
+            status,
+          });
+        }
+      }
+
       const maxContextTokens = resolvedModel.modelCapabilities.max_context_tokens;
       const defaultCompactionCap =
         maxContextTokens > 0

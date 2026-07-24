@@ -5,7 +5,7 @@ import {
   normalizeAPIStatusError,
 } from '#/errors';
 import type { Message, StreamedMessagePart, ThinkPart, ToolCall } from '#/message';
-import { isToolDeclarationOnlyMessage } from '#/message';
+import { isOpaqueAssistantMessage, isToolDeclarationOnlyMessage } from '#/message';
 import type {
   ChatProvider,
   FinishReason,
@@ -278,6 +278,8 @@ function messageToGoogleGenAI(message: Message): GoogleContent {
       case 'video_url':
         parts.push(convertMediaUrl(part.videoUrl.url, 'video/mp4'));
         break;
+      case 'openai_compaction':
+        break;
     }
   }
 
@@ -356,6 +358,8 @@ function toolMessageToFunctionResponseParts(
       case 'think':
         // Skip — handled separately via reasoning channel.
         break;
+      case 'openai_compaction':
+        break;
     }
   }
 
@@ -384,6 +388,10 @@ export function messagesToGoogleGenAIContents(messages: Message[]): GoogleConten
     // check, but skip explicitly so the behavior does not hinge on that
     // coincidence (and covers a non-system carrier defensively).
     if (isToolDeclarationOnlyMessage(message)) {
+      i += 1;
+      continue;
+    }
+    if (isOpaqueAssistantMessage(message)) {
       i += 1;
       continue;
     }

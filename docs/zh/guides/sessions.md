@@ -68,6 +68,10 @@ kimi --session
 
 对话变长时，Kimi Code CLI 会在上下文接近窗口上限时自动压缩历史消息，释放 token 空间。也可以随时手动触发：
 
+对于兼容 OpenAI Responses 的提供商，Kimi Code 会自动尝试其原生
+`/responses/compact` 接口，并保留接口返回的不透明替换状态。如果该能力不可用，
+或 `/compact` 带有自定义指引，则回退到 Kimi Code 原有的摘要压缩。无需额外配置。
+
 ```
 /compact
 ```

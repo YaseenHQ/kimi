@@ -40,7 +40,25 @@ export interface VideoURLPart {
   videoUrl: { url: string; id?: string | undefined };
 }
 
-export type ContentPart = TextPart | ThinkPart | ImageURLPart | AudioURLPart | VideoURLPart;
+/** Opaque state emitted by and replayed only to the OpenAI Responses API. */
+export interface OpenAICompactionPart {
+  type: 'openai_compaction';
+  encryptedContent: string;
+  id?: string | undefined;
+  /** Origin identity used to prevent replaying opaque state to another backend. */
+  source?: {
+    readonly model: string;
+    readonly baseUrl?: string | undefined;
+  } | undefined;
+}
+
+export type ContentPart =
+  | TextPart
+  | ThinkPart
+  | ImageURLPart
+  | AudioURLPart
+  | VideoURLPart
+  | OpenAICompactionPart;
 
 export interface ToolCall {
   type: 'function';
@@ -72,7 +90,22 @@ export interface Message {
 export function isContentPart(part: StreamedMessagePart): part is ContentPart {
   const t = part.type;
   return (
-    t === 'text' || t === 'think' || t === 'image_url' || t === 'audio_url' || t === 'video_url'
+    t === 'text' ||
+    t === 'think' ||
+    t === 'image_url' ||
+    t === 'audio_url' ||
+    t === 'video_url' ||
+    t === 'openai_compaction'
+  );
+}
+
+/** True when an assistant turn contains only provider-owned opaque state. */
+export function isOpaqueAssistantMessage(message: Message): boolean {
+  return (
+    message.role === 'assistant' &&
+    message.toolCalls.length === 0 &&
+    message.content.length > 0 &&
+    message.content.every((part) => part.type === 'openai_compaction')
   );
 }
 

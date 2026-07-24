@@ -40,6 +40,8 @@ export interface CompactionResult {
    * compatibility with older wire records.
    */
   droppedCount?: number;
+  /** Canonical provider-owned replacement window for native compaction. */
+  replacementMessages?: readonly import('@moonshot-ai/kosong').Message[];
 }
 
 /**
@@ -52,7 +54,7 @@ export type CompactionInput = Pick<CompactionResult, 'summary' | 'compactedCount
   Partial<
     Pick<
       CompactionResult,
-      'contextSummary' | 'tokensAfter' | 'keptUserMessageCount' | 'keptHeadUserMessageCount' | 'droppedCount'
+      'contextSummary' | 'tokensAfter' | 'keptUserMessageCount' | 'keptHeadUserMessageCount' | 'droppedCount' | 'replacementMessages'
     >
   >;
 

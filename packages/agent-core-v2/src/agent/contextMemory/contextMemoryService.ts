@@ -113,6 +113,8 @@ export class AgentContextMemoryService extends Disposable implements IAgentConte
     this.wire.dispatch(
       contextApplyCompaction({
         summary: result.summary,
+        replacementMessages:
+          input.replacementMessages === undefined ? undefined : [...input.replacementMessages],
         contextSummary: result.contextSummary,
         compactedCount: result.compactedCount,
         tokensBefore: result.tokensBefore,

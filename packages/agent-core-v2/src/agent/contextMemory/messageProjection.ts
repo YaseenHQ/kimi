@@ -36,7 +36,7 @@ function toProtocolRole(role: ContextMessage['role']): MessageRole {
   return role as MessageRole;
 }
 
-function mapContentPart(part: ContextMessage['content'][number]): MessageContent {
+function mapContentPart(part: ContextMessage['content'][number]): MessageContent | undefined {
   switch (part.type) {
     case 'text':
       return { type: 'text', text: part.text };
@@ -59,13 +59,22 @@ function mapContentPart(part: ContextMessage['content'][number]): MessageContent
         ? { type: 'video', source: { kind: 'file', file_id: ref.fileId } }
         : { type: 'video', source: { kind: 'url', url: part.videoUrl.url, id: part.videoUrl.id } };
     }
+    case 'openai_compaction':
+      return undefined;
   }
+}
+
+function mapContentParts(parts: ContextMessage['content']): MessageContent[] {
+  return parts.flatMap((part) => {
+    const mapped = mapContentPart(part);
+    return mapped === undefined ? [] : [mapped];
+  });
 }
 
 function buildProtocolContent(msg: ContextMessage): MessageContent[] {
   if (msg.role === 'tool') {
     if (msg.toolCallId === undefined) {
-      return msg.content.map((p) => mapContentPart(p));
+      return mapContentParts(msg.content);
     }
     const hasMediaPart = msg.content.some(
       (p) => p.type === 'image_url' || p.type === 'video_url' || p.type === 'audio_url',
@@ -89,7 +98,7 @@ function buildProtocolContent(msg: ContextMessage): MessageContent[] {
     return [part];
   }
 
-  const base = msg.content.map((p) => mapContentPart(p));
+  const base = mapContentParts(msg.content);
 
   if (msg.role === 'assistant' && msg.toolCalls.length > 0) {
     for (const call of msg.toolCalls) {

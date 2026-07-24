@@ -1,6 +1,7 @@
 import { normalizeKimiToolSchema } from './kimi-schema';
 import { parseTraceId } from '#/errors';
 import type { ContentPart, Message, StreamedMessagePart, ToolCall } from '#/message';
+import { isOpaqueAssistantMessage } from '#/message';
 import type {
   ChatProvider,
   FinishReason,
@@ -488,6 +489,7 @@ export class KimiChatProvider implements ChatProvider {
       thinking?.keep === 'all' && thinking.type !== 'disabled';
     const normalizedHistory = normalizeToolCallIdsForProvider(history, KIMI_TOOL_CALL_ID_POLICY);
     for (const msg of normalizedHistory) {
+      if (isOpaqueAssistantMessage(msg)) continue;
       messages.push(convertMessage(msg, preservedThinkingEnabled));
     }
 

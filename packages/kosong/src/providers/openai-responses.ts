@@ -10,6 +10,7 @@ import type {
   ChatProvider,
   FinishReason,
   GenerateOptions,
+  ProviderCompactionResult,
   ProviderRequestAuth,
   ResponseFormat,
   StreamedMessage,
@@ -97,6 +98,11 @@ type ResponseOutputItemView =
       type: 'reasoning';
       encryptedContent?: string;
       summary: RawObject[];
+    }
+  | {
+      type: 'compaction';
+      id?: string;
+      encryptedContent: string;
     }
   | {
       type: 'other';
@@ -195,6 +201,14 @@ function readResponseOutputItem(
       type,
       encryptedContent: readStringField(item, 'encrypted_content'),
       summary: readObjectArrayField(item, 'summary') ?? [],
+    };
+  }
+
+  if (type === 'compaction') {
+    return {
+      type,
+      id: readStringField(item, 'id'),
+      encryptedContent: requireStringField(item, 'encrypted_content', context),
     };
   }
 
@@ -375,6 +389,26 @@ interface ResponseInputItem {
   [key: string]: unknown;
 }
 
+interface CompactionSource {
+  readonly model: string;
+  readonly baseUrl?: string | undefined;
+}
+
+function normalizeBaseUrl(value: string | undefined): string | undefined {
+  return value?.replace(/\/+$/, '');
+}
+
+function canReplayCompaction(
+  source: CompactionSource | undefined,
+  target: CompactionSource,
+): boolean {
+  return (
+    source === undefined ||
+    (source.model === target.model &&
+      normalizeBaseUrl(source.baseUrl) === normalizeBaseUrl(target.baseUrl))
+  );
+}
+
 interface ResponseToolParam {
   type: string;
   name: string;
@@ -431,6 +465,9 @@ function contentPartsToInputItems(parts: ContentPart[]): unknown[] {
       case 'think':
         // Handled separately as reasoning items.
         break;
+      case 'openai_compaction':
+        // Emitted as a top-level item by convertMessage.
+        break;
     }
   }
   return items;
@@ -474,6 +511,9 @@ function messageContentToFunctionOutputItems(content: ContentPart[]): unknown[] 
       case 'think':
         // Handled separately as reasoning items.
         break;
+      case 'openai_compaction':
+        // Compaction items cannot appear inside function outputs.
+        break;
     }
   }
   return items;
@@ -508,6 +548,7 @@ function convertMessage(
   message: Message,
   modelName: string,
   toolMessageConversion: ToolMessageConversion,
+  compactionTarget: CompactionSource,
 ): ResponseInputItem[] {
   let role: string = message.role;
   if (usesOpenAIResponsesDeveloperRole(modelName) && role === 'system') {
@@ -589,6 +630,16 @@ function convertMessage(
           type: 'reasoning',
           encrypted_content: encryptedValue,
         });
+      } else if (part.type === 'openai_compaction') {
+        flushPendingParts();
+        if (canReplayCompaction(part.source, compactionTarget)) {
+          result.push({
+            type: 'compaction',
+            encrypted_content: part.encryptedContent,
+            id: part.id,
+          });
+        }
+        i += 1;
       } else {
         pendingParts.push(part);
         i += 1;
@@ -632,6 +683,7 @@ function convertHistoryMessages(
   history: readonly Message[],
   modelName: string,
   toolMessageConversion: ToolMessageConversion,
+  compactionTarget: CompactionSource,
 ): unknown[] {
   const input: unknown[] = [];
   const pendingToolResultMedia: unknown[] = [];
@@ -657,7 +709,7 @@ function convertHistoryMessages(
     if (msg.role !== 'tool') {
       flushPendingMedia();
     }
-    input.push(...convertMessage(msg, modelName, toolMessageConversion));
+    input.push(...convertMessage(msg, modelName, toolMessageConversion, compactionTarget));
     if (msg.role === 'tool' && toolMessageConversion === 'extract_text') {
       pendingToolResultMedia.push(
         ...messageContentToFunctionOutputItems(msg.content.filter(isMediaPart)),
@@ -668,6 +720,109 @@ function convertHistoryMessages(
   flushPendingMedia();
   return input;
 }
+
+function convertCompactedResponse(
+  response: unknown,
+  source: CompactionSource,
+): ProviderCompactionResult {
+  const raw = asRawObject(response);
+  if (raw === null) {
+    throw new ChatProviderError('OpenAI Responses compact returned an invalid response.');
+  }
+  const output = readObjectArrayField(raw, 'output');
+  if (output === undefined || output.length === 0) {
+    throw new ChatProviderError('OpenAI Responses compact returned an empty replacement window.');
+  }
+
+  const messages: Message[] = [];
+  let compactionCount = 0;
+  for (const item of output) {
+    const type = readStringField(item, 'type');
+    if (type === 'message') {
+      const roleValue = readStringField(item, 'role');
+      const role =
+        roleValue === 'developer'
+          ? 'system'
+          : roleValue === 'user' || roleValue === 'system'
+            ? roleValue
+            : undefined;
+      const content = readObjectArrayField(item, 'content');
+      if (role === undefined || content === undefined) {
+        throw new ChatProviderError(
+          'OpenAI Responses compact returned an unsupported message item.',
+        );
+      }
+      const parts: ContentPart[] = content.map((part) => {
+        const partType = readStringField(part, 'type');
+        if (partType === 'input_text' || partType === 'output_text') {
+          const text = readStringField(part, 'text');
+          if (text !== undefined) return { type: 'text', text };
+        }
+        if (partType === 'input_image') {
+          const imageUrl = readStringField(part, 'image_url');
+          if (imageUrl !== undefined) return { type: 'image_url', imageUrl: { url: imageUrl } };
+        }
+        throw new ChatProviderError(
+          `OpenAI Responses compact returned unsupported message content: ${partType ?? 'unknown'}.`,
+        );
+      });
+      messages.push({ role, content: parts, toolCalls: [] });
+      continue;
+    }
+    if (type === 'compaction') {
+      const encryptedContent = readStringField(item, 'encrypted_content');
+      if (encryptedContent === undefined) {
+        throw new ChatProviderError(
+          'OpenAI Responses compact returned a compaction item without encrypted content.',
+        );
+      }
+      compactionCount += 1;
+      messages.push({
+        role: 'assistant',
+        content: [{
+          type: 'openai_compaction',
+          encryptedContent,
+          id: readStringField(item, 'id'),
+          source,
+        }],
+        toolCalls: [],
+      });
+      continue;
+    }
+    throw new ChatProviderError(
+      `OpenAI Responses compact returned an unsupported replacement item: ${type ?? 'unknown'}.`,
+    );
+  }
+  if (compactionCount !== 1 || messages.at(-1)?.content[0]?.type !== 'openai_compaction') {
+    throw new ChatProviderError(
+      'OpenAI Responses compact must return user messages followed by one compaction item.',
+    );
+  }
+
+  const usageRaw = readObjectField(raw, 'usage');
+  let usage: TokenUsage | undefined;
+  if (usageRaw !== undefined && usageRaw !== null) {
+    const inputTokens = readNumberField(usageRaw, 'input_tokens') ?? 0;
+    const outputTokens = readNumberField(usageRaw, 'output_tokens') ?? 0;
+    const details = readObjectField(usageRaw, 'input_tokens_details');
+    const cached =
+      details === undefined || details === null
+        ? 0
+        : (readNumberField(details, 'cached_tokens') ?? 0);
+    usage = {
+      inputOther: Math.max(0, inputTokens - cached),
+      output: outputTokens,
+      inputCacheRead: cached,
+      inputCacheCreation: 0,
+    };
+  }
+  return {
+    messages,
+    usage,
+    id: readStringField(raw, 'id'),
+  };
+}
+
 export class OpenAIResponsesStreamedMessage implements StreamedMessage {
   private _id: string | null = null;
   private _usage: TokenUsage | null = null;
@@ -675,7 +830,11 @@ export class OpenAIResponsesStreamedMessage implements StreamedMessage {
   private _rawFinishReason: string | null = null;
   private readonly _iter: AsyncGenerator<StreamedMessagePart>;
 
-  constructor(response: unknown, isStream: boolean) {
+  constructor(
+    response: unknown,
+    isStream: boolean,
+    private readonly compactionSource?: CompactionSource,
+  ) {
     if (isStream) {
       this._iter = this._convertStreamResponse(response as AsyncIterable<RawObject>);
     } else {
@@ -779,6 +938,13 @@ export class OpenAIResponsesStreamedMessage implements StreamedMessage {
           }
           yield thinkPart;
         }
+      } else if (outputItem.type === 'compaction') {
+        yield {
+          type: 'openai_compaction',
+          encryptedContent: outputItem.encryptedContent,
+          id: outputItem.id,
+          ...(this.compactionSource === undefined ? {} : { source: this.compactionSource }),
+        };
       }
     }
   }
@@ -935,6 +1101,13 @@ export class OpenAIResponsesStreamedMessage implements StreamedMessage {
                 (thinkPart as { encrypted: string }).encrypted = item.encryptedContent;
               }
               yield thinkPart;
+            } else if (item.type === 'compaction') {
+              yield {
+                type: 'openai_compaction',
+                encryptedContent: item.encryptedContent,
+                id: item.id,
+                ...(this.compactionSource === undefined ? {} : { source: this.compactionSource }),
+              };
             } else if (item.type === 'function_call' && typeof item.arguments === 'string') {
               const streamIndex = responseStreamIndex(item.itemId, outputIndex);
               yield* yieldFinalArgumentsSuffix(streamIndex, item.arguments, type);
@@ -1095,8 +1268,17 @@ export class OpenAIResponsesChatProvider implements ChatProvider {
       history,
       OPENAI_RESPONSES_TOOL_CALL_ID_POLICY,
     );
+    const compactionSource = {
+      model: this._model,
+      baseUrl: options?.auth?.baseUrl ?? this._baseUrl,
+    };
     input.push(
-      ...convertHistoryMessages(normalizedHistory, this._model, this._toolMessageConversion),
+      ...convertHistoryMessages(
+        normalizedHistory,
+        this._model,
+        this._toolMessageConversion,
+        compactionSource,
+      ),
     );
 
     const kwargs: Record<string, unknown> = { ...this._generationKwargs };
@@ -1154,7 +1336,61 @@ export class OpenAIResponsesChatProvider implements ChatProvider {
           create(params: unknown, opts?: unknown): Promise<unknown>;
         }
       ).create(createParams, options?.signal ? { signal: options.signal } : undefined);
-      return new OpenAIResponsesStreamedMessage(response, this._stream);
+      return new OpenAIResponsesStreamedMessage(response, this._stream, compactionSource);
+    } catch (error: unknown) {
+      throw convertOpenAIError(error);
+    }
+  }
+
+  async compact(
+    systemPrompt: string,
+    _tools: Tool[],
+    history: Message[],
+    options?: GenerateOptions,
+  ): Promise<ProviderCompactionResult> {
+    const normalizedHistory = normalizeToolCallIdsForProvider(
+      history,
+      OPENAI_RESPONSES_TOOL_CALL_ID_POLICY,
+    );
+    const params: Record<string, unknown> = {
+      model: this._model,
+      input: convertHistoryMessages(
+        normalizedHistory,
+        this._model,
+        this._toolMessageConversion,
+        {
+          model: this._model,
+          baseUrl: options?.auth?.baseUrl ?? this._baseUrl,
+        },
+      ),
+    };
+    if (systemPrompt) params['instructions'] = systemPrompt;
+    const cacheKey = this._generationKwargs['prompt_cache_key'];
+    if (typeof cacheKey === 'string') params['prompt_cache_key'] = cacheKey;
+    // Preserve the encrypted reasoning chain across the compaction boundary.
+    // Codex sets `include: ["reasoning.encrypted_content"]` unconditionally on
+    // every Responses request (compaction included); without it the model
+    // retains message continuity but loses its accumulated reasoning state.
+    params['include'] = ['reasoning.encrypted_content'];
+
+    try {
+      const client = this._createClient(options?.auth);
+      const compact = (client as { responses?: { compact?: unknown } }).responses?.compact;
+      if (typeof compact !== 'function') {
+        throw new TypeError(
+          'OpenAI SDK version does not support Responses compaction. Upgrade to a version with responses.compact.',
+        );
+      }
+      options?.onRequestSent?.();
+      const response = await (
+        client.responses as {
+          compact(params: unknown, opts?: unknown): Promise<unknown>;
+        }
+      ).compact(params, options?.signal ? { signal: options.signal } : undefined);
+      return convertCompactedResponse(response, {
+        model: this._model,
+        baseUrl: options?.auth?.baseUrl ?? this._baseUrl,
+      });
     } catch (error: unknown) {
       throw convertOpenAIError(error);
     }

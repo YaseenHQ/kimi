@@ -1034,6 +1034,42 @@ describe('Agent context', () => {
     expect(result.keptUserMessageCount).toBe(1);
   });
 
+  it('applyCompaction installs and restores a provider-owned replacement window', async () => {
+    const ctx = testAgent();
+    ctx.configure();
+    ctx.agent.context.appendUserMessage([{ type: 'text', text: 'old request' }]);
+    const replacement = [
+      {
+        role: 'user' as const,
+        content: [{ type: 'text' as const, text: 'old request' }],
+        toolCalls: [],
+      },
+      {
+        role: 'assistant' as const,
+        content: [
+          {
+            type: 'openai_compaction' as const,
+            encryptedContent: 'opaque-state',
+            id: 'cmp_1',
+            source: { model: 'gpt-5.4', baseUrl: 'https://api.openai.com/v1' },
+          },
+        ],
+        toolCalls: [],
+      },
+    ];
+
+    const result = ctx.agent.context.applyCompaction({
+      summary: '[OpenAI server compaction checkpoint]',
+      replacementMessages: replacement,
+      compactedCount: 1,
+      tokensBefore: 50,
+    });
+
+    expect(ctx.agent.context.history).toEqual(replacement);
+    expect(result.keptUserMessageCount).toBe(1);
+    await ctx.expectResumeMatches();
+  });
+
   it('clears context before the next LLM request', async () => {
     const ctx = testAgent();
     ctx.configure();
