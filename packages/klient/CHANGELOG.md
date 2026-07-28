@@ -1,5 +1,12 @@
 # @moonshot-ai/klient
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee), [`a77ee03`](https://github.com/YaseenHQ/kimi/commit/a77ee0382965720f7ede523de1f6788bd4422df8), [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732), [`55e7b53`](https://github.com/YaseenHQ/kimi/commit/55e7b53dd6b43b5671cc8a4a3d4aa829685c2e1e), [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee), [`8ee637d`](https://github.com/YaseenHQ/kimi/commit/8ee637dd87e58f4ed327366e4655541e67740e95), [`cf99ad9`](https://github.com/YaseenHQ/kimi/commit/cf99ad9a76c306226a0420c292de57a7154483b0)]:
+  - @moonshot-ai/agent-core-v2@0.3.0
+
 ## 0.1.0
 
 ### Minor Changes

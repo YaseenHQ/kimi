@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.6
+
+### Patch Changes
+
+- Updated dependencies [[`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee), [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732), [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee), [`b17ea1f`](https://github.com/YaseenHQ/kimi/commit/b17ea1fcbbfd873e9e96cf4110fb97d5a6b31465), [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee)]:
+  - @moonshot-ai/kimi-code-sdk@0.15.0
+  - @moonshot-ai/migration-legacy@0.1.17
+
 ## 0.6.5
 
 ### Patch Changes

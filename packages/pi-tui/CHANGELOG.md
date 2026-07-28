@@ -1,5 +1,15 @@
 # @moonshot-ai/pi-tui
 
+## 0.81.2
+
+### Patch Changes
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Synchronize terminal input, paste restoration, line-ending handling, tab rendering, and cursor cleanup fixes from upstream.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Sync the vendored fork version string to the upstream release it tracks.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`2419cc3`](https://github.com/YaseenHQ/kimi/commit/2419cc3f49a49993d27886b52d656fc3d9b763cb) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Keep editor scroll indicators within narrow terminal widths while preserving their border color.
+
 ## 0.80.8
 
 ### Patch Changes

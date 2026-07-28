@@ -3,7 +3,7 @@
   "publisher": "yaseenhq",
   "displayName": "Echadron",
   "description": "Echadron coding agent for VS Code",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -83,7 +83,11 @@
         "echadron.editorContext": {
           "type": "string",
           "default": "never",
-          "enum": ["never", "onConversationStart", "onFileChange"],
+          "enum": [
+            "never",
+            "onConversationStart",
+            "onFileChange"
+          ],
           "description": "Control when to share the active editor's file and cursor position with Echadron"
         }
       }

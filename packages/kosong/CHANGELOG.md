@@ -1,5 +1,15 @@
 # @moonshot-ai/kosong
 
+## 0.5.6
+
+### Patch Changes
+
+- [#3](https://github.com/YaseenHQ/kimi/pull/3) [`55e7b53`](https://github.com/YaseenHQ/kimi/commit/55e7b53dd6b43b5671cc8a4a3d4aa829685c2e1e) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Preserve opaque OpenAI Responses compaction state across turns and automatically
+  use `/responses/compact` when the active provider exposes that capability,
+  falling back to Kimi's existing local summarizer when it does not.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Add unified account (OAuth) and API-key login routes with Kimi Code, xAI, OpenAI Codex, known catalog providers, and custom registries. Browser and device-code login methods are available for the supported OAuth providers. `/logout` supports individual and clearly described credential bundles plus separately confirmed provider-configuration removal; the redundant `/provider` slash command is removed.
+
 ## 0.5.5
 
 ### Patch Changes

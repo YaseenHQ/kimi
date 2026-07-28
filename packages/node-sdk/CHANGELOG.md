@@ -1,5 +1,23 @@
 # @moonshot-ai/kimi-code-sdk
 
+## 0.15.0
+
+### Minor Changes
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Add unified account (OAuth) and API-key login routes with Kimi Code, xAI, OpenAI Codex, known catalog providers, and custom registries. Browser and device-code login methods are available for the supported OAuth providers. `/logout` supports individual and clearly described credential bundles plus separately confirmed provider-configuration removal; the redundant `/provider` slash command is removed.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Add the /tree slash command to browse earlier turns and fork from a selected point. Run /tree to open the turn picker, then press Ctrl-X to copy its highlighted turn without closing it.
+
+### Patch Changes
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Show transient request and compaction retries in the activity pane, report aggregate token/cache usage in the footer, and make file-tool paths clickable in supporting terminals.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Keep Models.dev adapter and endpoint provenance on imported providers, share the
+  persisted catalog between `update --models` and the v2 server, and honor the
+  Echadron home directory when resolving config and server paths.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`b17ea1f`](https://github.com/YaseenHQ/kimi/commit/b17ea1fcbbfd873e9e96cf4110fb97d5a6b31465) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Fail fast on quota/balance-exhausted HTTP 429 errors (e.g. Moonshot `exceeded_current_quota_error`, OpenAI `insufficient_quota`) instead of silently retrying for ~3 minutes. Transient rate-limit 429s keep the existing retry, backoff, and Retry-After behavior.
+
 ## 0.14.0
 
 ### Minor Changes

@@ -1,5 +1,33 @@
 # @moonshot-ai/agent-core-v2
 
+## 0.3.0
+
+### Minor Changes
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Add unified account (OAuth) and API-key login routes with Kimi Code, xAI, OpenAI Codex, known catalog providers, and custom registries. Browser and device-code login methods are available for the supported OAuth providers. `/logout` supports individual and clearly described credential bundles plus separately confirmed provider-configuration removal; the redundant `/provider` slash command is removed.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`8ee637d`](https://github.com/YaseenHQ/kimi/commit/8ee637dd87e58f4ed327366e4655541e67740e95) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Allow custom agent profiles to select a model for delegated work. Set `model` in an agent file, or use `inherit` to keep the caller's model.
+
+### Patch Changes
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Show transient request and compaction retries in the activity pane, report aggregate token/cache usage in the footer, and make file-tool paths clickable in supporting terminals.
+
+- [#2144](https://github.com/MoonshotAI/kimi-code/pull/2144) [`a77ee03`](https://github.com/YaseenHQ/kimi/commit/a77ee0382965720f7ede523de1f6788bd4422df8) Thanks [@sailist](https://github.com/sailist)! - Let embedding hosts customize the agent's product name and reply-style guidance in the system prompt when starting the server.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Keep Models.dev adapter and endpoint provenance on imported providers, share the
+  persisted catalog between `update --models` and the v2 server, and honor the
+  Echadron home directory when resolving config and server paths.
+
+- [#3](https://github.com/YaseenHQ/kimi/pull/3) [`55e7b53`](https://github.com/YaseenHQ/kimi/commit/55e7b53dd6b43b5671cc8a4a3d4aa829685c2e1e) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Preserve opaque OpenAI Responses compaction state across turns and automatically
+  use `/responses/compact` when the active provider exposes that capability,
+  falling back to Kimi's existing local summarizer when it does not.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`cf99ad9`](https://github.com/YaseenHQ/kimi/commit/cf99ad9a76c306226a0420c292de57a7154483b0) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Derive the /usage plan usage window labels and reset hints from structured usage data instead of preformatted text.
+
+- Updated dependencies [[`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee), [`d92ccad`](https://github.com/YaseenHQ/kimi/commit/d92ccad95aa6310c2ad9143213a61529a3c2b4a4), [`1889925`](https://github.com/YaseenHQ/kimi/commit/188992554ca1d500d8bb67792e68d29da41a5303), [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee), [`cf99ad9`](https://github.com/YaseenHQ/kimi/commit/cf99ad9a76c306226a0420c292de57a7154483b0)]:
+  - @moonshot-ai/protocol@0.6.0
+  - @moonshot-ai/kimi-code-oauth@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

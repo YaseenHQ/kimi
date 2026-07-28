@@ -1,5 +1,61 @@
 # @moonshot-ai/kimi-code
 
+## 0.30.0
+
+### Minor Changes
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Make the fork-owned CLI launch as Echadron (`echadron`/`chad`/`maker`) with an isolated
+  `~/.echadron` data namespace, and add `echadron update --models` for a
+  persistent, validator-aware models.dev catalog refresh. Echadron no longer
+  invokes the upstream Kimi Code self-update path by default, and its install
+  hook no longer renames or removes an existing `kimi` executable.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Add unified account (OAuth) and API-key login routes with Kimi Code, xAI, OpenAI Codex, known catalog providers, and custom registries. Browser and device-code login methods are available for the supported OAuth providers. `/logout` supports individual and clearly described credential bundles plus separately confirmed provider-configuration removal; the redundant `/provider` slash command is removed.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`8ee637d`](https://github.com/YaseenHQ/kimi/commit/8ee637dd87e58f4ed327366e4655541e67740e95) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Allow custom agent profiles to select a model for delegated work. Set `model` in an agent file, or use `inherit` to keep the caller's model.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Add the /tree slash command to browse earlier turns and fork from a selected point. Run /tree to open the turn picker, then press Ctrl-X to copy its highlighted turn without closing it.
+
+### Patch Changes
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`fb9a15d`](https://github.com/YaseenHQ/kimi/commit/fb9a15d2a91a8f393e582a1437adf3313f077c4c) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Add an internal bash parsing capability that turns shell command strings into syntax trees, in preparation for per-command permission analysis. No user-facing behavior change yet.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Fix terminal paste restoration, legacy Alt-symbol input, tab rendering, mixed line endings, and cursor cleanup on exit.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Show transient request and compaction retries in the activity pane, report aggregate token/cache usage in the footer, and make file-tool paths clickable in supporting terminals.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Allow updating the subagent secondary model through the configuration API.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Add Ctrl-X as a shortcut for copying the last assistant response.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Align ACP with Echadron's live provider/model configuration: forward additional workspace roots, reload configuration after authentication and catalog changes, expose safe model context metadata, and stream context-window usage updates. Rename the terminal OAuth method and ACP identity to Echadron.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Make Echadron (`echadron` / `chad` / `maker`) the fork's user-facing identity while retaining the legacy storage interfaces for compatibility.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`d92ccad`](https://github.com/YaseenHQ/kimi/commit/d92ccad95aa6310c2ad9143213a61529a3c2b4a4) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Suppress the `Skipped refreshing managed:kimi-code: ... requires login` warning when switching models. The refresh orchestrator now treats an unauthenticated managed provider as not-yet-logged-in rather than a refresh failure.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`2419cc3`](https://github.com/YaseenHQ/kimi/commit/2419cc3f49a49993d27886b52d656fc3d9b763cb) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Keep editor scroll indicators readable without overflowing narrow terminals.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`1889925`](https://github.com/YaseenHQ/kimi/commit/188992554ca1d500d8bb67792e68d29da41a5303) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Listen for OAuth browser callbacks on both IPv4 (`127.0.0.1`) and IPv6 (`::1`) loopback addresses while keeping the `localhost` redirect URI. This fixes browser login failures on systems where `localhost` resolves to `::1` first (e.g., Codex and Anthropic PKCE flows).
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Keep Models.dev adapter and endpoint provenance on imported providers, share the
+  persisted catalog between `update --models` and the v2 server, and honor the
+  Echadron home directory when resolving config and server paths.
+
+- [#2147](https://github.com/MoonshotAI/kimi-code/pull/2147) [`29783e4`](https://github.com/YaseenHQ/kimi/commit/29783e471afcf7975852e496907646458264d2e6) Thanks [@wbxl2000](https://github.com/wbxl2000)! - Show a quota consumption note after installing official plugins that bill against plan quota (such as Kimi Datasource).
+
+- [#2147](https://github.com/MoonshotAI/kimi-code/pull/2147) [`29783e4`](https://github.com/YaseenHQ/kimi/commit/29783e471afcf7975852e496907646458264d2e6) Thanks [@wbxl2000](https://github.com/wbxl2000)! - Show an update notice when a turn that used an outdated plugin ends and the Official Marketplace has a newer version; each new version is announced once. Run /plugins to install the latest version.
+
+- [#3](https://github.com/YaseenHQ/kimi/pull/3) [`55e7b53`](https://github.com/YaseenHQ/kimi/commit/55e7b53dd6b43b5671cc8a4a3d4aa829685c2e1e) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Preserve opaque OpenAI Responses compaction state across turns and automatically
+  use `/responses/compact` when the active provider exposes that capability,
+  falling back to Kimi's existing local summarizer when it does not.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`b17ea1f`](https://github.com/YaseenHQ/kimi/commit/b17ea1fcbbfd873e9e96cf4110fb97d5a6b31465) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Fail fast on quota/balance-exhausted HTTP 429 errors (e.g. Moonshot `exceeded_current_quota_error`, OpenAI `insufficient_quota`) instead of silently retrying for ~3 minutes. Transient rate-limit 429s keep the existing retry, backoff, and Retry-After behavior.
+
+- [#1](https://github.com/YaseenHQ/kimi/pull/1) [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Replace decorative terminal emoji with restrained Unicode markers and semantic tool glyphs.
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`67a08cf`](https://github.com/YaseenHQ/kimi/commit/67a08cfd3b7df4dbcf5d3499348ad0d28c1861b0) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - web: Fix garbled line numbers in code blocks.
+
 ## 0.29.2
 
 ### Patch Changes

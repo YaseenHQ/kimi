@@ -1,5 +1,15 @@
 # @moonshot-ai/acp-adapter
 
+## 0.3.6
+
+### Patch Changes
+
+- [#7](https://github.com/YaseenHQ/kimi/pull/7) [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732) Thanks [@YaseenHQ](https://github.com/YaseenHQ)! - Align ACP with Echadron's live provider/model configuration: forward additional workspace roots, reload configuration after authentication and catalog changes, expose safe model context metadata, and stream context-window usage updates. Rename the terminal OAuth method and ACP identity to Echadron.
+
+- Updated dependencies [[`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee), [`aef303d`](https://github.com/YaseenHQ/kimi/commit/aef303de68acf4d8f7a75de6671d7b46d415e732), [`55e7b53`](https://github.com/YaseenHQ/kimi/commit/55e7b53dd6b43b5671cc8a4a3d4aa829685c2e1e), [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee), [`b17ea1f`](https://github.com/YaseenHQ/kimi/commit/b17ea1fcbbfd873e9e96cf4110fb97d5a6b31465), [`8ee637d`](https://github.com/YaseenHQ/kimi/commit/8ee637dd87e58f4ed327366e4655541e67740e95), [`02606aa`](https://github.com/YaseenHQ/kimi/commit/02606aa7218b4b01a26a28889d025fd3b6c5afee)]:
+  - @moonshot-ai/agent-core@0.16.0
+  - @moonshot-ai/kimi-code-sdk@0.15.0
+
 ## 0.3.5
 
 ### Patch Changes
