@@ -60,8 +60,9 @@ export class EchadronRuntime {
       createKimiHarness({
         ...(options.homeDir === undefined ? {} : { homeDir: options.homeDir }),
         identity: {
-          userAgentProduct: "echadron-vscode",
+          productName: "echadron-vscode",
           version: options.version,
+          platform: "kimi_code_vscode",
         },
         uiMode: "vscode",
       });

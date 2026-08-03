@@ -23,7 +23,6 @@ import {
 import {
   assertKimiHostIdentity,
   createKimiDefaultHeaders,
-  createKimiDeviceHeaders,
   type KimiHostIdentity,
 } from './identity';
 import {
@@ -554,9 +553,12 @@ export class KimiOAuthToolkit<TConfig = unknown> {
         identity === undefined
           ? undefined
           : () =>
-              createKimiDeviceHeaders({
+              // Full identity headers (User-Agent + X-Msh-*): the OAuth host
+              // reads the platform for the client family and the UA (suffix)
+              // for the runtime surface, e.g. kimi web's `(web)`.
+              createKimiDefaultHeaders({
                 homeDir: this.homeDir,
-                version: identity.version,
+                ...identity,
               }),
       ...this.managerOptions,
       requestDeviceImpl: xai

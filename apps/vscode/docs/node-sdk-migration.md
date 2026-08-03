@@ -81,7 +81,7 @@ stay in the trusted Extension Host.
 
 The runtime constructs the SDK client with:
 
-- `userAgentProduct: "echadron-vscode"`
+- `productName: "echadron-vscode"`
 - `version` from `apps/vscode/package.json`
 - `uiMode: "vscode"`
 
