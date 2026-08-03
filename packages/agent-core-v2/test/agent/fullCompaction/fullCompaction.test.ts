@@ -1204,6 +1204,7 @@ describe('FullCompaction', () => {
             code: 'compaction.failed',
             message: 'APIStatusError: Bad request',
           }),
+          interruptReason: 'error',
         },
       }),
     );
