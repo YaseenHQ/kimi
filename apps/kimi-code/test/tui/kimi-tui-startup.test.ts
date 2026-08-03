@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { BannerProvider } from '#/tui/banner/banner-provider';
 import { readBannerDisplayState } from '#/tui/banner/state';
-import { handleLogoutCommand } from '#/tui/commands/auth';
+import { handleLoginCommand, handleLogoutCommand } from '#/tui/commands/auth';
 import { handleKimiCodeOAuthLogin } from '#/tui/commands/provider-login';
 import {
   promptConfirmProviderConfigurationRemoval,
@@ -290,6 +290,24 @@ describe('KimiTUI startup', () => {
       contextUsage: 0.125,
       sessionTitle: 'Session title',
     });
+  });
+
+  it('binds the resolved agent profile and agent files to the startup session', async () => {
+    const session = makeSession();
+    const harness = makeHarness(session);
+    const driver = makeDriver(harness, {
+      ...makeStartupInput({ agent: 'reviewer', agentFiles: ['reviewer.md'] }),
+      agentProfile: 'reviewer',
+    });
+
+    await expect(driver.init()).resolves.toBe(false);
+
+    expect(harness.createSession).toHaveBeenCalledWith({
+      workDir: '/tmp/proj-a',
+      agentProfile: 'reviewer',
+      agentFiles: ['reviewer.md'],
+    });
+    expect(driver.state.startupState).toBe('ready');
   });
 
   it('resumes the latest session for --continue and marks history for replay', async () => {
@@ -1212,6 +1230,42 @@ describe('KimiTUI startup', () => {
       model: 'k2',
       permissionMode: 'yolo',
       planMode: true,
+    });
+  });
+
+  it('carries the agent binding into the post-login startup session', async () => {
+    const session = makeSession();
+    const createSession = vi
+      .fn()
+      .mockRejectedValueOnce(loginRequiredError())
+      .mockResolvedValueOnce(session);
+    const harness = makeHarness(session, {
+      getConfig: vi.fn(async () => ({
+        defaultModel: 'k2',
+        thinking: { enabled: false },
+        models: {
+          k2: { model: 'moonshot-v1', maxContextSize: 100 },
+        },
+      })),
+      createSession,
+    });
+    const driver = makeDriver(harness, {
+      ...makeStartupInput({ agent: 'reviewer', agentFiles: ['reviewer.md'] }),
+      agentProfile: 'reviewer',
+    });
+
+    await expect(driver.init()).resolves.toBe(false);
+
+    await handleKimiCodeOAuthLogin(driver as any);
+
+    expect(createSession).toHaveBeenNthCalledWith(2, {
+      workDir: '/tmp/proj-a',
+      model: 'k2',
+      thinking: 'off',
+      permission: undefined,
+      planMode: undefined,
+      agentProfile: 'reviewer',
+      agentFiles: ['reviewer.md'],
     });
   });
 

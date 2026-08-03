@@ -1,40 +1,40 @@
 # 环境变量
 
-Echadron CLI 通过环境变量控制少数运行时行为——迁移数据目录、关闭遥测、不改配置文件临时切换模型。
+Kimi Code CLI 通过环境变量控制少数运行时行为——迁移数据目录、关闭遥测、不改配置文件临时切换模型。
 
 ::: warning 重要：API 密钥不在这里配置
 `KIMI_API_KEY`、`ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等密钥变量**不会**从 shell 环境变量自动读取。在终端里 `export KIMI_API_KEY=xxx` 不会让任何供应商获得密钥——必须写在 `config.toml` 的 `[providers.<name>]` 段或 `[providers.<name>.env]` 子表里。
 
-唯一的例外是 `ECHADRON_MODEL_*` 系列，它是一个显式通道，*确实*会从 shell 读取凭证——详见[用环境变量定义模型](#用环境变量定义模型-echadron-model)。
+唯一的例外是 `KIMI_MODEL_*` 系列，它是一个显式通道，*确实*会从 shell 读取凭证——详见[用环境变量定义模型](#用环境变量定义模型-kimi-model)。
 
 背景说明见[配置覆盖：供应商凭证](./overrides.md#供应商凭证)。
 :::
 
 ## 核心路径
 
-### `ECHADRON_HOME` (旧别名：`KIMI_CODE_HOME`、`IMPERIUM_HOME`)
+### `KIMI_CODE_HOME`
 
-覆盖数据根目录，默认 `~/.echadron`。设置后，配置文件、会话、日志、OAuth 凭据等全部数据都落到新路径下：
+覆盖数据根目录，默认 `~/.kimi-code`。设置后，配置文件、会话、日志、OAuth 凭据等全部数据都落到新路径下：
 
 ```sh
-export ECHADRON_HOME="/path/to/custom/echadron"
+export KIMI_CODE_HOME="/path/to/custom/kimi-code"
 ```
 
-> 确保目录可写。多个 `kimi` 实例共用同一个 `ECHADRON_HOME` 会共享配置和凭证。
+> 确保目录可写。多个 `kimi` 实例共用同一个 `KIMI_CODE_HOME` 会共享配置和凭证。
 
 数据目录的完整结构见[数据路径](./data-locations.md)。
 
-### `ECHADRON_DISABLE_TELEMETRY`（旧别名：`KIMI_DISABLE_TELEMETRY`）
+### `KIMI_DISABLE_TELEMETRY`
 
 设为 `1` 关闭匿名遥测上报（也接受 `true`/`yes`/`y`，不区分大小写）：
 
 ```sh
-export ECHADRON_DISABLE_TELEMETRY=1
+export KIMI_DISABLE_TELEMETRY=1
 ```
 
-### `ECHADRON_MODEL_*` 系列
+### `KIMI_MODEL_*` 系列
 
-不修改 `config.toml` 临时切换模型——设置 `ECHADRON_MODEL_NAME` 后，CLI 在内存里合成一个临时供应商，重启后失效。详见[用环境变量定义模型](#用环境变量定义模型-echadron_model)。
+不修改 `config.toml` 临时切换模型——设置 `KIMI_MODEL_NAME` 后，CLI 在内存里合成一个临时供应商，重启后失效。详见[用环境变量定义模型](#用环境变量定义模型kimi_model)。
 
 ## 供应商凭证键（写在 config.toml 里）
 
@@ -83,16 +83,16 @@ KIMI_BASE_URL = "https://api.moonshot.ai/v1"
 `KIMI_CODE_BASE_URL`（OAuth 托管服务，指向 `kimi.com`）和 `KIMI_BASE_URL`（API 密钥直连，指向 `moonshot.ai`）是两个不同的变量，请按场景区分。
 :::
 
-## 用环境变量定义模型（`ECHADRON_MODEL_*`）
+## 用环境变量定义模型（`KIMI_MODEL_*`）
 
-测试时想换个模型但不想动 `config.toml`？设置 `ECHADRON_MODEL_NAME` 后，CLI 会从 `ECHADRON_MODEL_*` 系列变量在内存里合成出一个临时供应商和模型别名，不写回配置文件。优先级高于 `config.toml` 的 `default_model`，但低于启动时 `-m <alias>` 选项。
+测试时想换个模型但不想动 `config.toml`？设置 `KIMI_MODEL_NAME` 后，CLI 会从 `KIMI_MODEL_*` 系列变量在内存里合成出一个临时供应商和模型别名，不写回配置文件。优先级高于 `config.toml` 的 `default_model`，但低于启动时 `-m <alias>` 选项。
 
 ```sh
-export ECHADRON_MODEL_NAME="kimi-for-coding"
-export ECHADRON_MODEL_API_KEY="YOUR_API_KEY"
-export ECHADRON_MODEL_BASE_URL="https://api.example.com/v1"
-export ECHADRON_MODEL_MAX_CONTEXT_SIZE="262144"
-export ECHADRON_MODEL_CAPABILITIES="image_in,thinking"
+export KIMI_MODEL_NAME="kimi-for-coding"
+export KIMI_MODEL_API_KEY="YOUR_API_KEY"
+export KIMI_MODEL_BASE_URL="https://api.example.com/v1"
+export KIMI_MODEL_MAX_CONTEXT_SIZE="262144"
+export KIMI_MODEL_CAPABILITIES="image_in,thinking"
 kimi
 ```
 
@@ -100,19 +100,19 @@ kimi
 
 | 环境变量 | 必填 | 用途 | 默认值 |
 | --- | --- | --- | --- |
-| `ECHADRON_MODEL_NAME` | 是（同时是启用开关） | 发送给 API 的模型 ID | — |
-| `ECHADRON_MODEL_API_KEY` | 是 | API 密钥 | — |
-| `ECHADRON_MODEL_PROVIDER_TYPE` | 否 | 供应商类型：`kimi`、`anthropic`、`openai` | `kimi` |
-| `ECHADRON_MODEL_BASE_URL` | 否 | API 基础 URL | 各类型有各自默认值 |
-| `ECHADRON_MODEL_MAX_CONTEXT_SIZE` | 否 | 最大上下文长度（token 数） | `262144`（256K） |
-| `ECHADRON_MODEL_CAPABILITIES` | 否 | 逗号分隔的能力标签，与自动探测的能力取并集 | `image_in,thinking` |
-| `ECHADRON_MODEL_DISPLAY_NAME` | 否 | 在 `/model` 中显示的名称 | 回退到 `ECHADRON_MODEL_NAME` |
-| `ECHADRON_MODEL_MAX_OUTPUT_SIZE` | 否 | 单次输出上限（仅 `anthropic`）；设置后会覆盖内置的 Claude 上限 | 模型默认值 |
-| `ECHADRON_MODEL_REASONING_KEY` | 否 | 推理字段名覆盖（仅 `openai`） | 自动探测 |
-| `ECHADRON_MODEL_THINKING_EFFORT` | 否 | Thinking 强度：`low`/`medium`/`high`/`xhigh`/`max` | — |
-| `ECHADRON_MODEL_ADAPTIVE_THINKING` | 否 | 强制开启或关闭 adaptive thinking（仅 `anthropic`） | 按模型名推断 |
+| `KIMI_MODEL_NAME` | 是（同时是启用开关） | 发送给 API 的模型 ID | — |
+| `KIMI_MODEL_API_KEY` | 是 | API 密钥 | — |
+| `KIMI_MODEL_PROVIDER_TYPE` | 否 | 供应商类型：`kimi`、`anthropic`、`openai` | `kimi` |
+| `KIMI_MODEL_BASE_URL` | 否 | API 基础 URL | 各类型有各自默认值 |
+| `KIMI_MODEL_MAX_CONTEXT_SIZE` | 否 | 最大上下文长度（token 数） | `262144`（256K） |
+| `KIMI_MODEL_CAPABILITIES` | 否 | 逗号分隔的能力标签，与自动探测的能力取并集 | `image_in,thinking` |
+| `KIMI_MODEL_DISPLAY_NAME` | 否 | 在 `/model` 中显示的名称 | 回退到 `KIMI_MODEL_NAME` |
+| `KIMI_MODEL_MAX_OUTPUT_SIZE` | 否 | 单次输出上限（仅 `anthropic`）；设置后会覆盖内置的 Claude 上限 | 模型默认值 |
+| `KIMI_MODEL_REASONING_KEY` | 否 | 推理字段名覆盖（仅 `openai`） | 自动探测 |
+| `KIMI_MODEL_THINKING_EFFORT` | 否 | Thinking 强度：`low`/`medium`/`high`/`xhigh`/`max` | — |
+| `KIMI_MODEL_ADAPTIVE_THINKING` | 否 | 强制开启或关闭 adaptive thinking（仅 `anthropic`） | 按模型名推断 |
 
-设置了 `ECHADRON_MODEL_NAME` 但缺少必填变量时，启动会立即失败并给出明确提示。
+设置了 `KIMI_MODEL_NAME` 但缺少必填变量时，启动会立即失败并给出明确提示。
 
 ## 运行时开关
 
@@ -120,34 +120,34 @@ kimi
 
 | 环境变量 | 用途 | 合法值 |
 | --- | --- | --- |
-| `ECHADRON_DISABLE_TELEMETRY`（旧别名：`KIMI_DISABLE_TELEMETRY`） | 关闭匿名遥测上报 | `1`、`true`、`yes`、`y`（不区分大小写） |
-| `ECHADRON_BACKGROUND_KEEP_ALIVE_ON_EXIT` | 会话关闭时是否保留后台任务，优先级高于 `config.toml`。默认会在退出时停止后台任务 | 真值：`1`/`true`/`yes`/`on`；假值：`0`/`false`/`no`/`off` |
-| `ECHADRON_BACKGROUND_MAX_RUNNING_TASKS` | 同时运行的后台任务数上限，优先级高于 `config.toml` 的 `[background] max_running_tasks`（不设置表示无上限） | 正整数；非法值被忽略 |
-| `ECHADRON_IMAGE_MAX_EDGE_PX` | 图片压缩的最长边上限（像素），优先级高于 `config.toml` 的 `[image] max_edge_px`（默认 `2000`） | 正整数；非法值被忽略 |
-| `ECHADRON_IMAGE_READ_BYTE_BUDGET` | 模型自行读图（`ReadMediaFile` 默认读取）的单图字节预算，优先级高于 `config.toml` 的 `[image] read_byte_budget`（默认 `262144`，即 256 KB） | 正整数；非法值被忽略 |
-| `ECHADRON_PLUGIN_MARKETPLACE_URL` | 覆盖 `/plugins` 加载的 plugin marketplace JSON，适合 dev loopback server、测试 CDN 文件或替换 marketplace 目录 | `https://code.kimi.com/kimi-code/plugins/marketplace.json`；也接受 `http://`、`file://` URL 和本地路径 |
-| `ECHADRON_AGENT_SWARM_MAX_CONCURRENCY` | 限制 AgentSwarm 初始提升并发阶段可同时运行的子 Agent 数量；不设置表示不限制 | 正整数；非法值会立即失败 |
-| `ECHADRON_SUBAGENT_TIMEOUT_MS` | 单个子 Agent（`Agent` / `AgentSwarm`）可运行的最长时间（毫秒）；优先级高于 `config.toml` 的 `[subagent] timeout_ms`（默认 `7200000`，即 2 小时） | 正整数；非法值回退到配置或默认值 |
-| `ECHADRON_EXPERIMENTAL_SECONDARY_MODEL` | 在 `echadron web` 下启用实验性的次主力模型功能；`kimi -p` 仍需通过 `ECHADRON_EXPERIMENTAL_FLAG=1` 选择 v2 引擎，该 master flag 也会启用本功能 | 真值：`1`/`true`/`yes`/`on`；假值：`0`/`false`/`no`/`off` |
-| `ECHADRON_SECONDARY_MODEL` | 次主力模型；优先级高于 `config.toml` 的 `[secondary_model] model`。次主力模型实验功能启用后，新派生的子 Agent 默认绑定该模型，而不再继承主 Agent 的模型（TUI 不支持） | 已配置 `[models]` 中的模型 id，如 `kimi-code/kimi-k2.5`；空白值被忽略 |
-| `ECHADRON_SECONDARY_EFFORT` | 次主力模型的 thinking effort；优先级高于 `config.toml` 的 `[secondary_model] default_effort`，仅在次主力模型及其实验功能均启用时生效（TUI 不支持） | effort 取值，如 `low`；空白值被忽略 |
-| `ECHADRON_MCP_STARTUP_TIMEOUT_MS` | 所有 MCP server 的全局默认连接超时（毫秒）；优先级高于 `config.toml` 的 `[mcp] startup_timeout_ms`，但低于 `mcp.json` 中单个 server 的 `startupTimeoutMs`（默认 `30000`） | `1` 到 `2147483647` 的整数；非法值被忽略 |
-| `ECHADRON_MCP_TOOL_TIMEOUT_MS` | 所有 MCP server 的全局默认单次工具调用超时（毫秒）；优先级高于 `config.toml` 的 `[mcp] tool_timeout_ms`，但低于 `mcp.json` 中单个 server 的 `toolTimeoutMs`（默认 `60000`） | `1` 到 `2147483647` 的整数；非法值被忽略 |
-| `ECHADRON_LOOP_MAX_STEPS_PER_TURN` | Agent 单轮最大步数；优先级高于 `config.toml` 的 `[loop_control] max_steps_per_turn`（不设或 `0` 表示无上限） | 非负整数；非法值被忽略 |
-| `ECHADRON_LOOP_MAX_RETRIES_PER_STEP` | 单步失败后的最大重试次数；优先级高于 `config.toml` 的 `[loop_control] max_retries_per_step`（默认 `10`） | 非负整数；非法值被忽略 |
-| `ECHADRON_WEB_SEARCH_BASE_URL` | 网页搜索（`WebSearch`）服务的 API URL；优先级高于 `config.toml` 的 `[services.moonshot_search] base_url`，未写配置段时也可启用服务。文件中持久化的凭据和自定义 header 不会发送到环境变量指定的端点 | 非空字符串；空白值被忽略 |
-| `ECHADRON_WEB_SEARCH_API_KEY` | 网页搜索（`WebSearch`）服务的 API 密钥；设置后同时替换配置中的 API 密钥和 OAuth 凭据 | 非空字符串；空白值被忽略 |
-| `ECHADRON_WEB_FETCH_BASE_URL` | 网页抓取（`FetchURL`）服务的 API URL；优先级高于 `[services.moonshot_fetch] base_url`。文件中持久化的凭据和自定义 header 不会发送到环境变量指定的端点。环境变量和配置都没有指定端点时，已登录用户会先尝试 Kimi OAuth 托管抓取服务，再回退到本地直接请求 | 非空字符串；空白值被忽略 |
-| `ECHADRON_WEB_FETCH_API_KEY` | 网页抓取（`FetchURL`）服务的 API 密钥；设置后同时替换配置中的 API 密钥和 OAuth 凭据 | 非空字符串；空白值被忽略 |
-| `ECHADRON_EXPERIMENTAL_FLAG` | 在当前进程启用所有已注册的实验功能 | `1`、`true`、`yes`、`on` |
-| `ECHADRON_SHELL_PATH` | Windows 上覆盖 Git Bash 路径（自动探测失败时使用） | 绝对路径 |
-| `ECHADRON_MODEL_MAX_COMPLETION_TOKENS` | 单步 LLM 请求的 `max_completion_tokens` 硬上限，仅对 `kimi` 供应商生效 | 正整数；`0` 或负数禁用 clamp |
-| `ECHADRON_MODEL_TEMPERATURE` | 每次请求的采样温度，仅对 `kimi` 供应商生效（全局生效，不依赖 `ECHADRON_MODEL_NAME`） | 数字，如 `0.3` |
-| `ECHADRON_MODEL_TOP_P` | 每次请求的核采样 `top_p`，仅对 `kimi` 供应商生效（全局生效） | 数字，如 `0.95` |
-| `ECHADRON_MODEL_THINKING_EFFORT` | 在线上强制使用指定的思考强度（`thinking.effort`），绕过模型声明的 `support_efforts`；仅对 `kimi` 供应商生效，且仅在 Thinking 开启时注入 | 思考强度值，如 `max` |
-| `ECHADRON_MODEL_THINKING_KEEP` | 保留思考透传；在 `kimi` 上以 `thinking.keep` 发送，在 `anthropic`（Claude 以及 Kimi 的 Anthropic 兼容模式）上以 `context_management` 的 `clear_thinking_20251015` 编辑发送（开启 keep 会让 Anthropic 请求走 beta Messages API）；覆盖 `[thinking] keep`（其默认值为 `"all"`）；仅在 Thinking 开启时注入 | API 接受的值，如 `all`；传入关值（`false`/`0`/`no`/`off`/`none`/`null`）可禁用 |
-| `ECHADRON_NO_AUTO_UPDATE` | 完全禁用更新预检——不检查、不后台安装、不提示。同时兼容旧名 `KIMI_CLI_NO_AUTO_UPDATE` | 真值：`1`/`true`/`yes`/`on` |
-| `ECHADRON_DISABLE_CRON` | 禁用定时任务工具（`CronCreate` 拒绝新计划，已有任务不触发） | `1` 表示禁用 |
+| `KIMI_DISABLE_TELEMETRY` | 关闭匿名遥测上报 | `1`、`true`、`yes`、`y`（不区分大小写） |
+| `KIMI_CODE_BACKGROUND_KEEP_ALIVE_ON_EXIT` | 会话关闭时是否保留后台任务，优先级高于 `config.toml`。默认会在退出时停止后台任务 | 真值：`1`/`true`/`yes`/`on`；假值：`0`/`false`/`no`/`off` |
+| `KIMI_CODE_BACKGROUND_MAX_RUNNING_TASKS` | 同时运行的后台任务数上限，优先级高于 `config.toml` 的 `[background] max_running_tasks`（不设置表示无上限） | 正整数；非法值被忽略 |
+| `KIMI_IMAGE_MAX_EDGE_PX` | 图片压缩的最长边上限（像素），优先级高于 `config.toml` 的 `[image] max_edge_px`（默认 `2000`） | 正整数；非法值被忽略 |
+| `KIMI_IMAGE_READ_BYTE_BUDGET` | 模型自行读图（`ReadMediaFile` 默认读取）的单图字节预算，优先级高于 `config.toml` 的 `[image] read_byte_budget`（默认 `262144`，即 256 KB） | 正整数；非法值被忽略 |
+| `KIMI_CODE_PLUGIN_MARKETPLACE_URL` | 覆盖 `/plugins` 加载的 plugin marketplace JSON，适合 dev loopback server、测试 CDN 文件或替换 marketplace 目录 | `https://code.kimi.com/kimi-code/plugins/marketplace.json`；也接受 `http://`、`file://` URL 和本地路径 |
+| `KIMI_CODE_AGENT_SWARM_MAX_CONCURRENCY` | 限制 AgentSwarm 初始提升并发阶段可同时运行的子 Agent 数量；不设置表示不限制 | 正整数；非法值会立即失败 |
+| `KIMI_SUBAGENT_TIMEOUT_MS` | 单个子 Agent（`Agent` / `AgentSwarm`）可运行的最长时间（毫秒）；优先级高于 `config.toml` 的 `[subagent] timeout_ms`（默认 `7200000`，即 2 小时） | 正整数；非法值回退到配置或默认值 |
+| `KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL` | 在包括交互式 TUI 在内的所有启动方式下启用实验性的次主力模型功能；master `KIMI_CODE_EXPERIMENTAL_FLAG=1` 也会启用本功能 | 真值：`1`/`true`/`yes`/`on`；假值：`0`/`false`/`no`/`off` |
+| `KIMI_SECONDARY_MODEL` | 次主力模型；优先级高于 `config.toml` 的 `[secondary_model] model`。次主力模型实验功能启用后，新派生的子 Agent 默认绑定该模型，而不再继承主 Agent 的模型 | 已配置 `[models]` 中的模型 id，如 `kimi-code/kimi-k2.5`；空白值被忽略 |
+| `KIMI_SECONDARY_EFFORT` | 次主力模型的 thinking effort；优先级高于 `config.toml` 的 `[secondary_model] default_effort`，仅在次主力模型及其实验功能均启用时生效 | effort 取值，如 `low`；空白值被忽略 |
+| `KIMI_MCP_STARTUP_TIMEOUT_MS` | 所有 MCP server 的全局默认连接超时（毫秒）；优先级高于 `config.toml` 的 `[mcp] startup_timeout_ms`，但低于 `mcp.json` 中单个 server 的 `startupTimeoutMs`（默认 `30000`） | `1` 到 `2147483647` 的整数；非法值被忽略 |
+| `KIMI_MCP_TOOL_TIMEOUT_MS` | 所有 MCP server 的全局默认单次工具调用超时（毫秒）；优先级高于 `config.toml` 的 `[mcp] tool_timeout_ms`，但低于 `mcp.json` 中单个 server 的 `toolTimeoutMs`（默认 `60000`） | `1` 到 `2147483647` 的整数；非法值被忽略 |
+| `KIMI_LOOP_MAX_STEPS_PER_TURN` | Agent 单轮最大步数；优先级高于 `config.toml` 的 `[loop_control] max_steps_per_turn`（不设或 `0` 表示无上限） | 非负整数；非法值被忽略 |
+| `KIMI_LOOP_MAX_RETRIES_PER_STEP` | 单步失败后的最大重试次数；优先级高于 `config.toml` 的 `[loop_control] max_retries_per_step`（默认 `10`） | 非负整数；非法值被忽略 |
+| `KIMI_WEB_SEARCH_BASE_URL` | 网页搜索（`WebSearch`）服务的 API URL；优先级高于 `config.toml` 的 `[services.moonshot_search] base_url`，未写配置段时也可启用服务。文件中持久化的凭据和自定义 header 不会发送到环境变量指定的端点 | 非空字符串；空白值被忽略 |
+| `KIMI_WEB_SEARCH_API_KEY` | 网页搜索（`WebSearch`）服务的 API 密钥；设置后同时替换配置中的 API 密钥和 OAuth 凭据 | 非空字符串；空白值被忽略 |
+| `KIMI_WEB_FETCH_BASE_URL` | 网页抓取（`FetchURL`）服务的 API URL；优先级高于 `[services.moonshot_fetch] base_url`。文件中持久化的凭据和自定义 header 不会发送到环境变量指定的端点。环境变量和配置都没有指定端点时，已登录用户会先尝试 Kimi OAuth 托管抓取服务，再回退到本地直接请求 | 非空字符串；空白值被忽略 |
+| `KIMI_WEB_FETCH_API_KEY` | 网页抓取（`FetchURL`）服务的 API 密钥；设置后同时替换配置中的 API 密钥和 OAuth 凭据 | 非空字符串；空白值被忽略 |
+| `KIMI_CODE_EXPERIMENTAL_FLAG` | 在当前进程启用所有已注册的实验功能 | `1`、`true`、`yes`、`on` |
+| `KIMI_SHELL_PATH` | Windows 上覆盖 Git Bash 路径（自动探测失败时使用） | 绝对路径 |
+| `KIMI_MODEL_MAX_COMPLETION_TOKENS` | 单步 LLM 请求的 `max_completion_tokens` 硬上限，仅对 `kimi` 供应商生效 | 正整数；`0` 或负数禁用 clamp |
+| `KIMI_MODEL_TEMPERATURE` | 每次请求的采样温度，仅对 `kimi` 供应商生效（全局生效，不依赖 `KIMI_MODEL_NAME`） | 数字，如 `0.3` |
+| `KIMI_MODEL_TOP_P` | 每次请求的核采样 `top_p`，仅对 `kimi` 供应商生效（全局生效） | 数字，如 `0.95` |
+| `KIMI_MODEL_THINKING_EFFORT` | 在线上强制使用指定的思考强度（`thinking.effort`），绕过模型声明的 `support_efforts`；仅对 `kimi` 供应商生效，且仅在 Thinking 开启时注入 | 思考强度值，如 `max` |
+| `KIMI_MODEL_THINKING_KEEP` | 保留思考透传；在 `kimi` 上以 `thinking.keep` 发送，在 `anthropic`（Claude 以及 Kimi 的 Anthropic 兼容模式）上以 `context_management` 的 `clear_thinking_20251015` 编辑发送（开启 keep 会让 Anthropic 请求走 beta Messages API）；覆盖 `[thinking] keep`（其默认值为 `"all"`）；仅在 Thinking 开启时注入 | API 接受的值，如 `all`；传入关值（`false`/`0`/`no`/`off`/`none`/`null`）可禁用 |
+| `KIMI_CODE_NO_AUTO_UPDATE` | 完全禁用更新预检——不检查、不后台安装、不提示。同时兼容旧名 `KIMI_CLI_NO_AUTO_UPDATE` | 真值：`1`/`true`/`yes`/`on` |
+| `KIMI_DISABLE_CRON` | 禁用定时任务工具（`CronCreate` 拒绝新计划，已有任务不触发） | `1` 表示禁用 |
 
 ## 诊断日志
 
@@ -155,11 +155,11 @@ kimi
 
 | 环境变量 | 用途 | 默认值 |
 | --- | --- | --- |
-| `ECHADRON_LOG_LEVEL` | 日志级别：`off`、`error`、`warn`、`info`、`debug` | `info` |
-| `ECHADRON_LOG_GLOBAL_MAX_BYTES` | 全局日志文件单个最大字节数 | `6291456`（6 MB） |
-| `ECHADRON_LOG_GLOBAL_FILES` | 全局日志文件保留份数 | `5` |
-| `ECHADRON_LOG_SESSION_MAX_BYTES` | 会话级日志文件单个最大字节数 | `5242880`（5 MB） |
-| `ECHADRON_LOG_SESSION_FILES` | 会话级日志文件保留份数 | `3` |
+| `KIMI_LOG_LEVEL` | 日志级别：`off`、`error`、`warn`、`info`、`debug` | `info` |
+| `KIMI_LOG_GLOBAL_MAX_BYTES` | 全局日志文件单个最大字节数 | `6291456`（6 MB） |
+| `KIMI_LOG_GLOBAL_FILES` | 全局日志文件保留份数 | `5` |
+| `KIMI_LOG_SESSION_MAX_BYTES` | 会话级日志文件单个最大字节数 | `5242880`（5 MB） |
+| `KIMI_LOG_SESSION_FILES` | 会话级日志文件保留份数 | `3` |
 
 ## 系统环境变量
 
@@ -193,5 +193,5 @@ Kimi Code 会遵循标准代理环境变量，让所有出网流量——模型 
 ## 下一步
 
 - [配置覆盖](./overrides.md) — 环境变量、CLI 选项、配置文件的优先级关系
-- [数据路径](./data-locations.md) — `ECHADRON_HOME`（旧别名：`KIMI_CODE_HOME`）影响的完整目录结构
+- [数据路径](./data-locations.md) — `KIMI_CODE_HOME` 影响的完整目录结构
 - [平台与模型](./providers.md) — 各供应商类型的完整接入示例

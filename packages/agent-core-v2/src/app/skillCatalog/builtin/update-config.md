@@ -23,7 +23,7 @@ echo "$HOME/.echadron"
 
 Use the first non-empty line, otherwise the final default. In the rest of this skill, `<ECHADRON_HOME>` means that resolved root — **never assume `~/.echadron`**. Legacy roots remain readable during migration, but new files belong under the Echadron root.
 
-- **`config.toml`** — agent / runtime settings: `default_model`, `providers`, `models`, `thinking`, `permission`, `hooks`, `loop_control`, etc.
+- **`config.toml`** — agent / runtime settings: `default_model`, `secondary_model` (subagent model), `providers`, `models`, `thinking`, `permission`, `hooks`, `loop_control`, etc.
 - **`tui.toml`** — terminal-UI / client preferences: `theme`, `[editor].command`, `[notifications]`, `[upgrade].auto_install` (auto-update). These can usually also be changed with the interactive commands `/config`, `/theme`, `/editor`, which is easier — prefer pointing the user at those.
 
 The "read → copy → Edit → validate → back up → overwrite" flow below applies to both files; only **which reload command applies** differs (see Capability 4).

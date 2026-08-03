@@ -125,7 +125,13 @@ export class Agent {
     return this._kaos;
   }
 
-  readonly kimiConfig?: KimiConfig;
+  /**
+   * The session config snapshot this agent reads (loop control, subagent
+   * binding descriptions, ...). Mutable via {@link updateKimiConfig} so the
+   * session can push live config updates (e.g. a `/secondary_model` switch)
+   * to already-instantiated agents.
+   */
+  kimiConfig?: KimiConfig;
   readonly homedir?: string;
   readonly mediaOriginalsDir?: string;
   readonly rpc?: Partial<SDKAgentRPC>;
@@ -467,10 +473,19 @@ export class Agent {
     profile: ResolvedAgentProfile,
     context?: PreparedSystemPromptContext,
     brandHome?: string,
+    subagentNames?: readonly string[],
   ): void {
     this.setActiveProfile(profile, brandHome);
-    this.updateSystemPromptFromProfile(profile, context);
-    this.tools.setActiveTools(profile.tools);
+    this.updateSystemPromptFromProfile(profile, context, subagentNames);
+    this.tools.setActiveTools(profile.tools, profile.disallowedTools);
+  }
+
+  /** Push a refreshed session config snapshot and rebuild config-dependent builtin tools. */
+  updateKimiConfig(config: KimiConfig | undefined): void {
+    this.kimiConfig = config;
+    if (this.config.hasProvider) {
+      this.tools.refreshBuiltinTools();
+    }
   }
 
   setActiveProfile(profile: ResolvedAgentProfile, brandHome?: string): void {
@@ -497,6 +512,7 @@ export class Agent {
   private updateSystemPromptFromProfile(
     profile: ResolvedAgentProfile,
     context?: PreparedSystemPromptContext,
+    subagentNames?: readonly string[],
   ): void {
     const systemPrompt = profile.systemPrompt({
       osEnv: this.kaos.osEnv,
@@ -506,7 +522,7 @@ export class Agent {
       agentsMd: context?.agentsMd,
       additionalDirsInfo: context?.additionalDirsInfo,
     });
-    this.config.update({ profileName: profile.name, systemPrompt });
+    this.config.update({ profileName: profile.name, systemPrompt, subagentNames });
   }
 
   async resume(options?: AgentRecordsReplayOptions): Promise<{ warning?: string }> {

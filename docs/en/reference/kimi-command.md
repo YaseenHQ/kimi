@@ -1,15 +1,15 @@
-# `echadron` Command
+# `kimi` Command
 
-`echadron` is the main command for Echadron CLI, used to start an interactive session in the terminal. Running it without any arguments opens a new session in the current working directory; combined with different flags, you can resume a previous session, skip approvals, start in Plan mode, or load Skills from a custom directory.
+`kimi` is the main command for Kimi Code CLI, used to start an interactive session in the terminal. Running it without any arguments opens a new session in the current working directory; combined with different flags, you can resume a previous session, skip approvals, start in Plan mode, or load Skills from a custom directory.
 
 ```sh
-echadron [options]
-echadron <subcommand> [options]
+kimi [options]
+kimi <subcommand> [options]
 ```
 
 ## Main Command Options
 
-All flags are optional — run `echadron` directly to enter an interactive session:
+All flags are optional — run `kimi` directly to enter an interactive session:
 
 | Option | Short | Description |
 | --- | --- | --- |
@@ -24,8 +24,8 @@ All flags are optional — run `echadron` directly to enter an interactive sessi
 | `--auto` | | Start with auto permission mode; tool approvals are handled automatically and the Agent will not ask the user questions |
 | `--plan` | | Start a new session in Plan mode — the AI will prioritize read-only tools for exploration and planning |
 | `--skills-dir <dir>` | | Load Skills from the specified directory, replacing the automatically discovered user and project directories. Can be repeated |
-| `--agent <name>` | | Start the session with the specified agent as the main Agent (experimental `echadron -p` only) |
-| `--agent-file <path>` | | Load a custom agent from a Markdown file for this launch and select it (experimental `echadron -p` only). Cannot be repeated or combined with `--agent` |
+| `--agent <name>` | | Start a new session with the specified agent as the main Agent. Cannot be combined with `--session`/`--continue` |
+| `--agent-file <path>` | | Load a custom agent from a Markdown file for the new session and select it. Cannot be repeated or combined with `--agent`, `--session`, or `--continue` |
 | `--add-dir <dir>` | | Add an extra workspace directory for this session. Relative paths resolve against the current working directory. Can be repeated |
 
 `-r` / `--resume` is a hidden alias for `--session`; `--yes` and `--auto-approve` are hidden aliases for `--yolo` and are not shown in help output.
@@ -43,45 +43,45 @@ The following combinations are rejected at startup:
 - `--prompt` cannot be used with `--yolo`, `--auto`, or `--plan` — non-interactive mode uses `auto` permission by default
 - `--output-format` can only be used together with `--prompt`
 
-When resuming a session, you can override its saved permission or plan mode by adding `--auto`, `--yolo`, or `--plan`. For example, `echadron --continue --auto` resumes the latest session and switches it to auto permission mode.
+When resuming a session, you can override its saved permission or plan mode by adding `--auto`, `--yolo`, or `--plan`. For example, `kimi --continue --auto` resumes the latest session and switches it to auto permission mode.
 
 ## Common Usage
 
 Start a new session directly:
 
 ```sh
-echadron
+kimi
 ```
 
 Pick up where you left off (automatically finds the most recent session in the current directory):
 
 ```sh
-echadron --continue
+kimi --continue
 ```
 
 Choose from the session history list, or specify a known ID directly:
 
 ```sh
-echadron --session
-echadron --session 01HZ...XYZ
+kimi --session
+kimi --session 01HZ...XYZ
 ```
 
 Skip approval prompts — suitable for batch tasks that are known to be safe:
 
 ```sh
-echadron --yolo
+kimi --yolo
 ```
 
 Let the Agent handle everything autonomously, without asking the user questions:
 
 ```sh
-echadron --auto
+kimi --auto
 ```
 
 Read the code and produce an implementation plan before making any file changes:
 
 ```sh
-echadron --plan
+kimi --plan
 ```
 
 ### Custom Skills Directories
@@ -91,27 +91,28 @@ There are two ways to specify Skills directories, with different semantics:
 - **`--skills-dir <dir>`** (CLI flag): **Replaces** the automatically discovered user and project directories for this launch only. Can be repeated to stack multiple directories:
 
   ```sh
-  echadron --skills-dir /path/to/team-skills --skills-dir ./local-skills
+  kimi --skills-dir /path/to/team-skills --skills-dir ./local-skills
   ```
 
 - **`extra_skill_dirs`** (`config.toml`): **Adds** directories on top of the automatically discovered ones, taking effect permanently. Suitable for configuring team-shared Skills. See [Agent Skills](../customization/skills.md).
 
 ### Custom Agents
 
-`--agent` and `--agent-file` select which agent drives the session. Both are currently available only under `echadron -p` with `KIMI_CODE_EXPERIMENTAL_FLAG=1`; any other launch rejects them with a clear error:
+`--agent` and `--agent-file` select which agent drives a new session, in both print mode (`kimi -p`) and the interactive TUI:
 
 ```sh
-KIMI_CODE_EXPERIMENTAL_FLAG=1 echadron -p --agent reviewer "Review the changes on this branch"
+kimi --agent reviewer
+kimi -p --agent reviewer "Review the changes on this branch"
 ```
 
-`--agent-file` registers a single agent file at the highest priority for this launch only and selects it; the flag cannot be repeated, and `--agent` and `--agent-file` are mutually exclusive. The selection is fixed at the session's first bind: resuming with the same `--agent` is a no-op, and switching to a different one fails with an "already bound" error. See [Agents and Sub-Agents](../customization/agents.md#custom-agents) for the agent file format and discovery directories.
+`--agent-file` registers a single agent file at the highest priority for this launch only and selects it; the flag cannot be repeated, and `--agent` and `--agent-file` are mutually exclusive. Both flags only apply when starting a new session — neither can be combined with `--session`/`--continue`, because the agent is bound at session creation and resuming restores the bound agent automatically. The selection is fixed at the session's first bind and cannot be switched later; in the TUI the flags bind only the startup session, and a session created later in the same process (for example via `/new`) starts with the default agent. See [Agents and Sub-Agents](../customization/agents.md#custom-agents) for the agent file format and discovery directories.
 
 ## Non-Interactive Execution
 
 When running a single prompt in a script or CI environment, use `-p`:
 
 ```sh
-echadron -p "Summarize the current repository status"
+kimi -p "Summarize the current repository status"
 ```
 
 Output uses a transcript style: thinking content and Assistant text are both prefixed with `• `, and wrapped lines are indented by two spaces. Assistant text goes to stdout; thinking, tool progress, and "resuming session" notices go to stderr. In `-p` mode, no human approval is requested — regular tool calls are handled under the `auto` permission policy, while static deny rules remain in effect.
@@ -119,52 +120,52 @@ Output uses a transcript style: thinking content and Assistant text are both pre
 Temporarily switch the model:
 
 ```sh
-echadron -m kimi-code/kimi-for-coding -p "Explain the latest diff"
+kimi -m kimi-code/kimi-for-coding -p "Explain the latest diff"
 ```
 
 When you need to parse output programmatically, use the `stream-json` format — each line on stdout is a JSON object:
 
 ```sh
-echadron -p "List changed files" --output-format stream-json
+kimi -p "List changed files" --output-format stream-json
 ```
 
 In `stream-json` mode, regular replies produce an Assistant message; when the model calls a tool, an Assistant message with `tool_calls` is emitted first, followed by the corresponding Tool message, then subsequent Assistant messages. Thinking content is not written to JSONL; tool progress and "resuming session" notices are still written to stderr.
 
 ## Subcommands
 
-`echadron` provides the following subcommands: `login` (non-interactive OAuth login), `acp` (ACP IDE mode), `web` (run the local REST/WebSocket/web service in the foreground and open the web UI), `doctor` (validate configuration files), `export` (export a session), `migrate` (migrate legacy data), `upgrade` (check for updates), and `provider` (manage providers).
+`kimi` provides the following subcommands: `login` (non-interactive login), `acp` (ACP IDE mode), `web` (run the local REST/WebSocket/web service in the foreground and open the web UI), `doctor` (validate configuration files), `export` (export a session), `migrate` (migrate legacy data), `upgrade` (check for updates), and `provider` (manage providers).
 
-### `echadron login`
+### `kimi login`
 
-Log in to Echadron OAuth via the RFC 8628 device-code flow, without entering the TUI. The command issues a device authorization request, prints the verification URL and user code to stderr, then polls until the browser-side authorization is complete. The generated token is written to the same local location as TUI `/login` and is loaded automatically the next time `echadron` starts.
+Log in to Kimi Code OAuth via the RFC 8628 device-code flow, without entering the TUI. The command issues a device authorization request, prints the verification URL and user code to stderr, then polls until the browser-side authorization is complete. The generated token is written to the same local location as TUI `/login` and is loaded automatically the next time `kimi` starts.
 
 ```sh
-echadron login
+kimi login
 ```
 
 This subcommand has no flags. Press `Ctrl-C` at any time during polling to cancel; the exit code is `1` on cancellation or failure, and `0` on success.
 
-### `echadron acp`
+### `kimi acp`
 
-Switch Echadron to ACP (Agent Client Protocol) mode, communicating with an IDE via JSON-RPC over stdin/stdout so the editor can directly drive Echadron's sessions and tool calls. You typically do not need to run this manually — the IDE starts it as a subprocess entry point. For configuration, see [Using in IDEs](../guides/ides.md); for technical details, see the [echadron acp reference](./kimi-acp.md).
+Switch Kimi Code CLI to ACP (Agent Client Protocol) mode, communicating with an IDE via JSON-RPC over stdin/stdout so the editor can directly drive kimi's sessions and tool calls. You typically do not need to run this manually — the IDE starts it as a subprocess entry point. For configuration, see [Using in IDEs](../guides/ides.md); for technical details, see the [kimi acp reference](./kimi-acp.md).
 
 ```sh
-echadron acp
+kimi acp
 ```
 
-### `echadron web`
+### `kimi web`
 
-Run the local Echadron server in the foreground of the current terminal — a single process that exposes the REST + WebSocket API and serves the web UI from the same origin — and open the web UI in the default browser once it is ready. The command stays attached to the terminal and shuts down cleanly on `SIGINT` / `SIGTERM` (e.g. `Ctrl-C`).
+Run the local Kimi server in the foreground of the current terminal — a single process that exposes the REST + WebSocket API and serves the web UI from the same origin — and open the web UI in the default browser once it is ready. The command stays attached to the terminal and shuts down cleanly on `SIGINT` / `SIGTERM` (e.g. `Ctrl-C`).
 
 When the server is running, `GET /openapi.json` returns the REST OpenAPI document and `GET /asyncapi.json` returns the local WebSocket AsyncAPI document.
 
 ```sh
-echadron web                 # run the server in the foreground and open the browser
-echadron web --no-open       # don't open the browser
-echadron web --port 58628    # pick a specific bind port
+kimi web                 # run the server in the foreground and open the browser
+kimi web --no-open       # don't open the browser
+kimi web --port 58628    # pick a specific bind port
 ```
 
-Multiple instances can share one home directory: each registers itself under `~/.echadron/server/instances/`, and a busy port is retried with `port + 1` (58628, 58629, …). Legacy homes are discovered when `ECHADRON_HOME` is not set.
+Multiple instances can share one home directory: each registers itself under `~/.kimi-code/server/instances/`, and a busy port is retried with `port + 1` (58628, 58629, …).
 
 | Option | Description |
 | --- | --- |
@@ -176,57 +177,57 @@ Multiple instances can share one home directory: each registers itself under `~/
 | `--dangerous-bypass-auth` | Disable bearer-token auth on all REST and WebSocket routes so the web UI connects without a token; only for trusted networks or behind an authenticating proxy |
 | `--no-open` | Do not open the browser once the server is ready |
 
-`echadron web` binds to local loopback only by default and prints the bearer token in the startup banner; the web UI authenticates automatically via the `#token=` URL fragment.
+`kimi web` binds to local loopback only by default and prints the bearer token in the startup banner; the web UI authenticates automatically via the `#token=` URL fragment.
 
 ::: info
-The `echadron server` command tree is deprecated: any `echadron server …` invocation (including all legacy subcommands) only prints a deprecation notice and exits with code 1 — use `echadron web` instead. The one exception is `echadron server kill`, which stays functional for stopping servers started by a version before 0.28.0. The notice will be removed in the next major version of Echadron.
+The `kimi server` command tree is deprecated: any `kimi server …` invocation (including all legacy subcommands) only prints a deprecation notice and exits with code 1 — use `kimi web` instead. The one exception is `kimi server kill`, which stays functional for stopping servers started by a version before 0.28.0. The notice will be removed in the next major version of Kimi Code.
 :::
 
 ::: danger
 `--dangerous-bypass-auth` disables authentication entirely. Anyone who can reach the port gets full access to your sessions, filesystem, and shell. Only use it on a trusted network or behind your own authenticating reverse proxy, and stop the server with `Ctrl+C` when you are done.
 :::
 
-#### `echadron server kill`
+#### `kimi server kill`
 
-Deprecated — only stops a server started by a version before 0.28.0. Those versions could leave a background server behind, recorded in the legacy single-instance lock at `~/.echadron/server/lock`; the command first tries `POST /api/v1/shutdown` for a graceful exit, then signals the recorded pid with SIGTERM, escalating to SIGKILL when needed, and removes the lock file once the process is confirmed dead. Servers started by `echadron web` run in the foreground — stop them with `Ctrl+C` instead.
+Deprecated — only stops a server started by a version before 0.28.0. Those versions could leave a background server behind, recorded in the legacy single-instance lock at `~/.kimi-code/server/lock`; the command first tries `POST /api/v1/shutdown` for a graceful exit, then signals the recorded pid with SIGTERM, escalating to SIGKILL when needed, and removes the lock file once the process is confirmed dead. Servers started by `kimi web` run in the foreground — stop them with `Ctrl+C` instead.
 
-#### `echadron web rotate-token`
+#### `kimi web rotate-token`
 
-Generate a new persistent bearer token (written to `~/.echadron/server.token`); the previous token stops working immediately. The token is shared by the whole home directory, so every running instance picks the new one up on its next auth check — no restart needed.
+Generate a new persistent bearer token (written to `~/.kimi-code/server.token`); the previous token stops working immediately. The token is shared by the whole home directory, so every running instance picks the new one up on its next auth check — no restart needed.
 
-### `echadron doctor`
+### `kimi doctor`
 
-Validate `config.toml` and `tui.toml` without starting the TUI or modifying either file. By default, the command checks the files under `ECHADRON_HOME` (or `~/.echadron` when the environment variable is unset). `IMPERIUM_HOME` and `KIMI_CODE_HOME` remain accepted migration aliases. Missing default files are reported as skipped because built-in defaults can apply.
+Validate `config.toml` and `tui.toml` without starting the TUI or modifying either file. By default, the command checks the files under `KIMI_CODE_HOME` (or `~/.kimi-code` when the environment variable is unset). Missing default files are reported as skipped because built-in defaults can apply.
 
 ```sh
-echadron doctor
+kimi doctor
 ```
 
 | Command | Description |
 | --- | --- |
-| `echadron doctor` | Validate the default `config.toml` and `tui.toml` |
-| `echadron doctor config [path]` | Validate only `config.toml`, using `path` instead of the default file when provided |
-| `echadron doctor tui [path]` | Validate only `tui.toml`, using `path` instead of the default file when provided |
+| `kimi doctor` | Validate the default `config.toml` and `tui.toml` |
+| `kimi doctor config [path]` | Validate only `config.toml`, using `path` instead of the default file when provided |
+| `kimi doctor tui [path]` | Validate only `tui.toml`, using `path` instead of the default file when provided |
 
 When an explicit path is passed, the file must exist. The command exits with `0` when all checked files are valid or skipped, and `1` when any requested file is missing or invalid.
 
 ```sh
 # Check the default config files
-echadron doctor
+kimi doctor
 
 # Check only the default runtime config
-echadron doctor config
+kimi doctor config
 
 # Check a candidate TUI config before replacing the live config
-echadron doctor tui ./tui.toml
+kimi doctor tui ./tui.toml
 ```
 
-### `echadron export`
+### `kimi export`
 
 Package a session into a ZIP file for sharing, archiving, or submitting bug reports.
 
 ```sh
-echadron export [sessionId] [options]
+kimi export [sessionId] [options]
 ```
 
 | Parameter / Option | Short | Description |
@@ -236,45 +237,45 @@ echadron export [sessionId] [options]
 | `--yes` | `-y` | Skip the confirmation prompt for the default session and export directly |
 | `--no-include-global-log` | | Do not include the global diagnostic log. Included by default |
 
-The export contains all files in the target session directory. The global diagnostic log (`~/.echadron/logs/kimi-code.log`) keeps its legacy filename for SDK and archive compatibility and is included by default because it may contain events from other sessions or projects; add `--no-include-global-log` if you do not want to share it.
+The export contains all files in the target session directory. The global diagnostic log (`~/.kimi-code/logs/kimi-code.log`) is included by default because it may contain events from other sessions or projects; add `--no-include-global-log` if you do not want to share it.
 
 ```sh
 # Export the most recent session in the current directory, skipping confirmation
-echadron export -y
+kimi export -y
 
 # Export a specific session to a custom path
-echadron export 01HZ...XYZ -o ./bug-report.zip
+kimi export 01HZ...XYZ -o ./bug-report.zip
 
 # Exclude the global diagnostic log
-echadron export 01HZ...XYZ -o ./bug-report.zip --no-include-global-log
+kimi export 01HZ...XYZ -o ./bug-report.zip --no-include-global-log
 ```
 
-### `echadron migrate`
+### `kimi migrate`
 
-Migrate local data from a legacy kimi-cli installation to Echadron, including session history and configuration files. Runs entirely interactively, guiding you through the full process.
+Migrate local data from a legacy kimi-cli installation to kimi-code, including session history and configuration files. Runs entirely interactively, guiding you through the full process.
 
 ```sh
-echadron migrate
+kimi migrate
 ```
 
 For full migration instructions, see [Migrating from kimi-cli](../guides/migration.md).
 
-### `echadron upgrade`
+### `kimi upgrade`
 
-Immediately check for the latest version and display an update prompt; exits after you make a selection. `echadron update` is an alias for this command.
+Immediately check for the latest version and display an update prompt; exits after you make a selection. `kimi update` is an alias for this command.
 
 ```sh
-echadron upgrade
+kimi upgrade
 ```
 
-For global npm, pnpm, yarn, bun, and macOS / Linux native installations, `echadron upgrade` shows update options; selecting `Install update now` runs the corresponding foreground install command. When the current installation method cannot be upgraded automatically (e.g., Windows native installation), the manual update command is printed instead.
+For global npm, pnpm, yarn, bun, and macOS / Linux native installations, `kimi upgrade` shows update options; selecting `Install update now` runs the corresponding foreground install command. When the current installation method cannot be upgraded automatically (e.g., Windows native installation), the manual update command is printed instead.
 
-### `echadron vis`
+### `kimi vis`
 
 Launch the session visualizer in your browser to inspect a session as it unfolds. The command starts an in-process server pointed at your local sessions, prints the URL, opens your browser, and keeps running until you press `Ctrl-C`.
 
 ```sh
-echadron vis [sessionId] [options]
+kimi vis [sessionId] [options]
 ```
 
 | Parameter / Option | Description |
@@ -286,26 +287,26 @@ echadron vis [sessionId] [options]
 
 ```sh
 # Start the visualizer and open the browser at the home view
-echadron vis
+kimi vis
 
 # Open directly to a specific session
-echadron vis 01HZ...XYZ
+kimi vis 01HZ...XYZ
 
 # Bind a fixed port and host without opening a browser (e.g. on a remote host)
-echadron vis --host 0.0.0.0 --port 8123 --no-open
+kimi vis --host 0.0.0.0 --port 8123 --no-open
 ```
 
-### `echadron provider`
+### `kimi provider`
 
-Manage providers non-interactively from the shell. Suitable for scripted deployments, CI initialization, and one-line setup on a new machine.
+Manage providers in the shell — the non-interactive equivalent of `/provider` in the TUI. Suitable for scripted deployments, CI initialization, and one-line setup on a new machine.
 
 ```sh
-echadron provider <action> [options]
+kimi provider <action> [options]
 ```
 
 Five actions are available:
 
-#### `echadron provider add <url>`
+#### `kimi provider add <url>`
 
 Bulk-import all providers from a custom registry (`api.json`). The command fetches the registry, creates a `[providers.<id>]` and `[models.<alias>]` entry for each item, and writes `source` metadata so the TUI refreshes providers and models from the same registry URL automatically on next startup.
 
@@ -315,32 +316,32 @@ Bulk-import all providers from a custom registry (`api.json`). The command fetch
 | `--api-key <key>` | Bearer token for accessing the registry. Falls back to the `KIMI_REGISTRY_API_KEY` environment variable if not provided; required |
 
 ```sh
-echadron provider add https://registry.example.com/v1/models/api.json --api-key YOUR_KEY
+kimi provider add https://registry.example.com/v1/models/api.json --api-key YOUR_KEY
 
 # Or via environment variable (suitable for CI / .envrc)
-KIMI_REGISTRY_API_KEY=YOUR_KEY echadron provider add https://registry.example.com/v1/models/api.json
+KIMI_REGISTRY_API_KEY=YOUR_KEY kimi provider add https://registry.example.com/v1/models/api.json
 ```
 
 If a provider ID already exists, it is removed and re-created. The default model is not set automatically; you can select one later with `-m` or `/model` in the TUI.
 
-#### `echadron provider remove <providerId>`
+#### `kimi provider remove <providerId>`
 
 Remove the specified provider and all its model aliases. If the removed provider is the one referenced by `default_model`, `default_model` is also cleared.
 
 ```sh
-echadron provider remove kohub
+kimi provider remove kohub
 ```
 
-#### `echadron provider list`
+#### `kimi provider list`
 
 Print each configured provider on a separate line, including type, model count, and source. Add `--json` to output the raw `providers` and `models` tables for programmatic processing.
 
 ```sh
-echadron provider list
-echadron provider list --json | jq '.providers | keys'
+kimi provider list
+kimi provider list --json | jq '.providers | keys'
 ```
 
-#### `echadron provider catalog list [providerId]`
+#### `kimi provider catalog list [providerId]`
 
 Browse the public [models.dev](https://models.dev/) model catalog without modifying any configuration. Without an argument, lists all providers along with their protocol type and model count; with a `providerId`, lists all models under that provider along with their context window and capabilities.
 
@@ -352,12 +353,12 @@ Browse the public [models.dev](https://models.dev/) model catalog without modify
 | `--json` | Output matching entries as JSON |
 
 ```sh
-echadron provider catalog list
-echadron provider catalog list --filter anthropic
-echadron provider catalog list anthropic
+kimi provider catalog list
+kimi provider catalog list --filter anthropic
+kimi provider catalog list anthropic
 ```
 
-#### `echadron provider catalog add <providerId>`
+#### `kimi provider catalog add <providerId>`
 
 Import a known provider directly from the catalog by ID. The protocol type, base URL, and model information are all supplied by the catalog — only an API key is required. Vendors whose protocol the catalog does not declare (e.g. xai, openrouter, and other vendor-specific SDKs) are imported as OpenAI-compatible and the output notes the guess; when the catalog provides no usable endpoint, `--base-url` is required. Proprietary protocols (e.g. Amazon Bedrock) cannot be imported.
 
@@ -370,8 +371,8 @@ Import a known provider directly from the catalog by ID. The protocol type, base
 | `--url <url>` | Override the catalog URL; defaults to `https://models.dev/api.json` |
 
 ```sh
-echadron provider catalog list anthropic          # Browse available models first
-echadron provider catalog add anthropic --api-key sk-ant-... --default-model claude-opus-4-7
+kimi provider catalog list anthropic          # Browse available models first
+kimi provider catalog add anthropic --api-key sk-ant-... --default-model claude-opus-4-7
 ```
 
 ## Next steps

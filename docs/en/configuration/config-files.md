@@ -1,18 +1,18 @@
 # Configuration files
 
-Echadron writes all long-term preferences — which model to use, which API key to fill in, how many steps an Agent can run per turn — into TOML (a plain-text configuration format with a clear structure) files. Change them once and they take effect on every startup. Agent and runtime settings live in `config.toml`; terminal-UI and client preferences (theme, editor, notifications, auto-update) live in a companion `tui.toml`.
+Kimi Code CLI writes all long-term preferences — which model to use, which API key to fill in, how many steps an Agent can run per turn — into TOML (a plain-text configuration format with a clear structure) files. Change them once and they take effect on every startup. Agent and runtime settings live in `config.toml`; terminal-UI and client preferences (theme, editor, notifications, auto-update) live in a companion `tui.toml`.
 
-Default location: `~/.echadron/config.toml`, created automatically on first run.
+Default location: `~/.kimi-code/config.toml`, created automatically on first run.
 
 ## Config file location
 
-The CLI reads configuration from `~/.echadron/config.toml`. To relocate the data directory, override it with the `ECHADRON_HOME` environment variable:
+The CLI reads configuration from `~/.kimi-code/config.toml`. To relocate the data directory, override it with the `KIMI_CODE_HOME` environment variable:
 
 ```sh
-export ECHADRON_HOME=/path/to/echadron-home
+export KIMI_CODE_HOME=/path/to/kimi-home
 ```
 
-The config file path then becomes `$ECHADRON_HOME/config.toml`. Regardless of where the directory lives, the file name is always `config.toml`.
+The config file path then becomes `$KIMI_CODE_HOME/config.toml`. Regardless of where the directory lives, the file name is always `config.toml`.
 
 ::: tip
 TOML field names always use snake_case, for example `default_model` and `max_context_size`. If a key contains `.`, you must quote it — for example `[models."gpt-4.1"]` — otherwise TOML treats `.` as a nested table separator.
@@ -87,7 +87,7 @@ pattern = "Bash(rm -rf*)"
 [[hooks]]
 event = "PreToolUse"
 matcher = "Bash"
-command = "node ~/.echadron/hooks/check-bash.mjs"
+command = "node ~/.kimi-code/hooks/check-bash.mjs"
 timeout = 5
 ```
 
@@ -192,7 +192,9 @@ You can also switch models temporarily without touching the config file — by s
 
 The secondary model is a second model pointer next to the primary `default_model` — typically a cheaper model that features can bind to when they do not need the main model. Its consumer today is subagent spawning: when set, newly spawned subagents (`Agent` / `AgentSwarm`) bind to it by default instead of inheriting the main agent's model, and the main agent is told it can pick per spawn between `"secondary"` (this model) and `"primary"` (the main model). When unset, subagents inherit the main agent's model.
 
-This feature is experimental and disabled by default. Under `echadron web`, enable it with `KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL=1`. Under `echadron -p`, `KIMI_CODE_EXPERIMENTAL_FLAG=1` is already required to select the v2 engine and also enables this feature. The interactive TUI ignores the configuration.
+This feature is experimental and disabled by default. Enable it with `KIMI_CODE_EXPERIMENTAL_SECONDARY_MODEL=1`, or the master `KIMI_CODE_EXPERIMENTAL_FLAG=1`. It takes effect in every launch mode, including the interactive TUI.
+
+In the interactive TUI, the [`/secondary_model`](../reference/slash-commands.md) command opens a model picker that writes this section and live-applies it to the current session, so newly spawned subagents bind the new secondary model right away.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -251,23 +253,23 @@ Retries only apply to transient failures — connection errors, timeouts, HTTP 4
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `max_running_tasks` | `integer` | — | Maximum number of background tasks running concurrently |
-| `keep_alive_on_exit` | `boolean` | `false` | Whether to keep still-running background tasks when the session closes. By default, Echadron requests that all background tasks stop before the process exits; set this to `true` only when you want tasks to outlive the session. In print mode (`echadron -p`), this is only a legacy fallback used when `print_background_mode` is unset: `true` is equivalent to `print_background_mode = "drain"` |
-| `kill_grace_period_ms` | `integer` | `5000` | Grace period in milliseconds after session close, a manual stop, or a task timeout requests graceful termination. If a task is still running after this period, Echadron attempts to force-stop it |
+| `keep_alive_on_exit` | `boolean` | `false` | Whether to keep still-running background tasks when the session closes. By default, Kimi Code requests that all background tasks stop before the process exits; set this to `true` only when you want tasks to outlive the session. In print mode (`kimi -p`), this is only a legacy fallback used when `print_background_mode` is unset: `true` is equivalent to `print_background_mode = "drain"` |
+| `kill_grace_period_ms` | `integer` | `5000` | Grace period in milliseconds after session close, a manual stop, or a task timeout requests graceful termination. If a task is still running after this period, Kimi Code attempts to force-stop it |
 | `bash_auto_background_on_timeout` | `boolean` | `true` | When a foreground `Bash` command hits its timeout, move it to a background task instead of killing it — the agent is notified when it completes, and the backgrounded command is bounded by the `bash_task_timeout_s` default background timeout. Set to `false` to kill timed-out foreground commands instead |
-| `bash_task_timeout_s` | `integer` | `600` | Default timeout (seconds) for background `Bash` tasks when the call omits `timeout`; also used to re-arm foreground commands moved to the background on timeout. `0` means no timeout — the task runs until it exits or the model stops it. Explicit per-call `timeout` values are unaffected. In print mode (`echadron -p`) the default is `0` unless explicitly set |
-| `print_background_mode` | `"exit" \| "drain" \| "steer"` | `"steer"` | Print mode (`echadron -p`) only. Governs how pending background tasks are handled once the main agent's turn ends: `"exit"` exits immediately; `"drain"` waits for every background task to reach a terminal state before exiting (results are not fed back to the main agent); `"steer"` stays alive so a completing background task — like a background subagent — injects a synthetic user message that steers the main agent into a new turn, looping until a turn ends with no pending background tasks or a limit is hit. Takes precedence over the `keep_alive_on_exit` print fallback |
-| `print_wait_ceiling_s` | `integer` | `315360000` | In print mode (`echadron -p`), the wall-clock ceiling (seconds) for the wait/steer loop when `print_background_mode` is `"drain"` or `"steer"` (the default is 10 years — effectively unbounded). Has no effect outside print mode or when it is `"exit"` |
-| `print_max_turns` | `integer` | `100000` | In print mode (`echadron -p`) with `print_background_mode = "steer"`, the maximum number of new turns that may be triggered by background-task completions, to keep the steering loop bounded (the default is effectively unbounded) |
+| `bash_task_timeout_s` | `integer` | `600` | Default timeout (seconds) for background `Bash` tasks when the call omits `timeout`; also used to re-arm foreground commands moved to the background on timeout. `0` means no timeout — the task runs until it exits or the model stops it. Explicit per-call `timeout` values are unaffected. In print mode (`kimi -p`) the default is `0` unless explicitly set |
+| `print_background_mode` | `"exit" \| "drain" \| "steer"` | `"steer"` | Print mode (`kimi -p`) only. Governs how pending background tasks are handled once the main agent's turn ends: `"exit"` exits immediately; `"drain"` waits for every background task to reach a terminal state before exiting (results are not fed back to the main agent); `"steer"` stays alive so a completing background task — like a background subagent — injects a synthetic user message that steers the main agent into a new turn, looping until a turn ends with no pending background tasks or a limit is hit. Takes precedence over the `keep_alive_on_exit` print fallback |
+| `print_wait_ceiling_s` | `integer` | `315360000` | In print mode (`kimi -p`), the wall-clock ceiling (seconds) for the wait/steer loop when `print_background_mode` is `"drain"` or `"steer"` (the default is 10 years — effectively unbounded). Has no effect outside print mode or when it is `"exit"` |
+| `print_max_turns` | `integer` | `100000` | In print mode (`kimi -p`) with `print_background_mode = "steer"`, the maximum number of new turns that may be triggered by background-task completions, to keep the steering loop bounded (the default is effectively unbounded) |
 
 `keep_alive_on_exit` can be overridden by the `KIMI_CODE_BACKGROUND_KEEP_ALIVE_ON_EXIT` environment variable, and `max_running_tasks` by `KIMI_CODE_BACKGROUND_MAX_RUNNING_TASKS`; both take higher priority than `config.toml`.
 
-In print mode (`echadron -p "<prompt>"`), Echadron stays alive after the main agent's turn as long as background tasks are still pending: each completion is fed back to the main agent as a synthetic user message, steering it into a new turn (`print_background_mode = "steer"` by default), and the run exits once a turn ends with nothing pending. The loop is bounded by `print_wait_ceiling_s` and `print_max_turns`, both effectively unbounded by default. Background work is never killed by a wall-clock cap in print mode either: background `Bash` tasks default to no timeout (`bash_task_timeout_s = 0`), and subagents run without a timeout (`[subagent] timeout_ms = 0`), so only the model itself stops a task. Set `print_background_mode` to `"drain"` to wait for tasks without feeding results back, or `"exit"` to end the run as soon as the main agent finishes.
+In print mode (`kimi -p "<prompt>"`), Kimi Code stays alive after the main agent's turn as long as background tasks are still pending: each completion is fed back to the main agent as a synthetic user message, steering it into a new turn (`print_background_mode = "steer"` by default), and the run exits once a turn ends with nothing pending. The loop is bounded by `print_wait_ceiling_s` and `print_max_turns`, both effectively unbounded by default. Background work is never killed by a wall-clock cap in print mode either: background `Bash` tasks default to no timeout (`bash_task_timeout_s = 0`), and subagents run without a timeout (`[subagent] timeout_ms = 0`), so only the model itself stops a task. Set `print_background_mode` to `"drain"` to wait for tasks without feeding results back, or `"exit"` to end the run as soon as the main agent finishes.
 
 ## `subagent`
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `timeout_ms` | `integer` | `7200000` (2 hours) | Maximum wall-clock time (milliseconds) a single subagent (`Agent` / `AgentSwarm`) is allowed to run before it is settled as `timed_out`. `0` means no timeout — the subagent runs until it finishes or the model stops it. This is the background-task manager's per-task timeout for each subagent task, so it applies to both foreground and background subagents. In print mode (`echadron -p`) the default is `0` unless explicitly set. Note: any value above `2147483647` (about 24.8 days) is clamped to roughly 24.8 days by the runtime |
+| `timeout_ms` | `integer` | `7200000` (2 hours) | Maximum wall-clock time (milliseconds) a single subagent (`Agent` / `AgentSwarm`) is allowed to run before it is settled as `timed_out`. `0` means no timeout — the subagent runs until it finishes or the model stops it. This is the background-task manager's per-task timeout for each subagent task, so it applies to both foreground and background subagents. In print mode (`kimi -p`) the default is `0` unless explicitly set. Note: any value above `2147483647` (about 24.8 days) is clamped to roughly 24.8 days by the runtime |
 `timeout_ms` can be overridden by the `KIMI_SUBAGENT_TIMEOUT_MS` environment variable, which takes higher priority than `config.toml`.
 
 ## `mcp`
@@ -375,12 +377,12 @@ pattern = "Bash"
 ```
 
 ::: tip
-MCP server declarations are configured in `~/.echadron/mcp.json` or the project-local `.echadron/mcp.json`, not in `config.toml`. The legacy `.kimi-code/mcp.json` path is also read when present. The interactive configuration entry point is `/mcp-config`; see [Model Context Protocol](../customization/mcp.md).
+MCP server declarations are configured in `~/.kimi-code/mcp.json` or the project-local `.kimi-code/mcp.json`, not in `config.toml`. The interactive configuration entry point is `/mcp-config`; see [Model Context Protocol](../customization/mcp.md).
 :::
 
 ## `tui.toml`
 
-Alongside `config.toml`, the CLI keeps terminal-UI and client preferences in a companion `tui.toml` in the same directory (`~/.echadron/tui.toml`, or `$ECHADRON_HOME/tui.toml` when overridden). It is created with defaults on first run, and the interactive commands `/config`, `/theme`, and `/editor` write to it for you — so you rarely need to edit it by hand. If the file is malformed, the CLI falls back to defaults and shows a notice instead of failing to start.
+Alongside `config.toml`, the CLI keeps terminal-UI and client preferences in a companion `tui.toml` in the same directory (`~/.kimi-code/tui.toml`, or `$KIMI_CODE_HOME/tui.toml` when overridden). It is created with defaults on first run, and the interactive commands `/config`, `/theme`, and `/editor` write to it for you — so you rarely need to edit it by hand. If the file is malformed, the CLI falls back to defaults and shows a notice instead of failing to start.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -390,9 +392,11 @@ Alongside `config.toml`, the CLI keeps terminal-UI and client preferences in a c
 | `[notifications].enabled` | `boolean` | `true` | Whether desktop notifications are sent |
 | `[notifications].notification_condition` | `string` | `unfocused` | When to notify: `unfocused` (only when the terminal is not focused) or `always` |
 | `[upgrade].auto_install` | `boolean` | `true` | Whether new versions are installed automatically |
+| `[status_line].items` | `string[]` | `[]` | Built-in slots to show on the first footer line and their order: `mode`, `goal`, `model`, `tasks`, `cwd`, `git`, `tips`. Unset keeps the default layout; unknown ids are skipped with a warning |
+| `[status_line].command` | `string` | `""` | Custom status line command. Its first stdout line replaces the first footer line, with a JSON snapshot (model, cwd, git branch, permission mode, plan mode, context usage, session id, version) passed on stdin. Runs are capped at 300ms and throttled to once per second; failures fall back to the built-in layout |
 
 ```toml
-# ~/.echadron/tui.toml
+# ~/.kimi-code/tui.toml
 theme = "auto" # "auto" | "dark" | "light" | custom theme name
 disable_paste_burst = false # true disables non-bracketed paste-burst fallback
 
@@ -405,13 +409,17 @@ notification_condition = "unfocused" # "unfocused" | "always"
 
 [upgrade]
 auto_install = true
+
+# [status_line]
+# items = ["mode", "goal", "model", "tasks", "cwd", "git", "tips"]
+# command = "~/.kimi-code/statusline.sh"
 ```
 
 Changes apply on the next start, or immediately with `/reload-tui` (which reloads only `tui.toml`); `/reload` reloads both `config.toml` and `tui.toml`.
 
 ## Project-local configuration
 
-In addition to the user-level files under `~/.echadron`, Echadron reads a project-local configuration file at `<project-root>/.echadron/local.toml`. It holds settings that are specific to one project checkout and typically should not be shared with teammates. The legacy `<project-root>/.kimi-code/local.toml` path remains supported.
+In addition to the user-level files under `~/.kimi-code`, Kimi Code reads a project-local configuration file at `<project-root>/.kimi-code/local.toml`. It holds settings that are specific to one project checkout and typically should not be shared with teammates.
 
 The file is created automatically when you add an extra workspace directory with [`/add-dir`](../reference/slash-commands.md) and choose to remember it for the project. You rarely need to edit it by hand.
 
@@ -428,10 +436,10 @@ The `[workspace]` table groups project-level workspace settings:
 additional_dir = ["/absolute/path/to/shared"]
 ```
 
-Because directories are stored as absolute paths, which are specific to your machine, we recommend adding `.echadron/local.toml` to your project's `.gitignore` so it is not committed.
+Because directories are stored as absolute paths, which are specific to your machine, we recommend adding `.kimi-code/local.toml` to your project's `.gitignore` so it is not committed.
 
 ## Next steps
 
 - [Providers and models](./providers.md) — connection examples for each provider type (Kimi, Claude, OpenAI, Gemini)
 - [Config overrides](./overrides.md) — priority rules for CLI options, config file, and environment variables
-- [Environment variables](./env-vars.md) — complete list of runtime variables like `ECHADRON_HOME`
+- [Environment variables](./env-vars.md) — complete list of runtime variables like `KIMI_CODE_HOME`

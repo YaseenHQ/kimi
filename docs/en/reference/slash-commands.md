@@ -15,6 +15,7 @@ Some commands are only available in the idle state. Executing these commands whi
 | `/login` | — | Select an account or platform and log in: Kimi Code uses OAuth device-code flow; Kimi Platform uses API key login | No |
 | `/logout` | — | Clear individual or bundled credentials, or remove saved provider configuration | No |
 | `/model` | — | Switch the LLM model used in the current session | Yes |
+| `/secondary_model` | — | Configure the secondary model used by subagents (writes the [`[secondary_model]`](../configuration/config-files.md#secondary_model) section and applies to the current session immediately). Requires the `secondary-model` experiment | Yes |
 | `/settings` | `/config` | Open the settings panel inside the TUI | Yes |
 | `/experiments` | `/experimental` | Open the experimental feature panel | Yes |
 | `/permission` | — | Select a permission mode | Yes |
